@@ -234,6 +234,7 @@ function PortfolioFormModal({
       description: '',
       coverColor: '#0B3D91',
       coverAccent: '#C9A961',
+      images: [],
       tags: [],
       featured: false,
       published: true,
@@ -388,6 +389,83 @@ function PortfolioFormModal({
             value={form.description ?? ''}
             onChange={(e) => setField('description', e.target.value)}
           />
+        </div>
+
+        <div className="field">
+          <label className="field-label">시공 사진 (URL 한 줄에 하나씩)</label>
+          <textarea
+            className="textarea"
+            rows={3}
+            placeholder={
+              'https://images.unsplash.com/photo-...?w=1200\nhttps://...'
+            }
+            value={(form.images ?? []).join('\n')}
+            onChange={(e) => {
+              const urls = e.target.value
+                .split(/\n|,/)
+                .map((s) => s.trim())
+                .filter(Boolean);
+              setField('images', urls);
+            }}
+          />
+          <div
+            className="row"
+            style={{ gap: 8, marginTop: 8, flexWrap: 'wrap' }}
+          >
+            {(form.images ?? []).slice(0, 4).map((url, i) => (
+              <div
+                key={i}
+                style={{
+                  width: 88,
+                  height: 88,
+                  borderRadius: 'var(--radius-md)',
+                  backgroundImage: `url(${url})`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                  border: '1px solid var(--color-border)',
+                  position: 'relative',
+                }}
+              >
+                <button
+                  type="button"
+                  className="btn btn-sm btn-ghost"
+                  onClick={() => {
+                    setField(
+                      'images',
+                      (form.images ?? []).filter((_, idx) => idx !== i)
+                    );
+                  }}
+                  style={{
+                    position: 'absolute',
+                    top: -6,
+                    right: -6,
+                    width: 24,
+                    height: 24,
+                    padding: 0,
+                    borderRadius: '50%',
+                    background: 'rgba(0,0,0,0.65)',
+                    color: '#fff',
+                    fontSize: 12,
+                    lineHeight: 1,
+                  }}
+                  aria-label="사진 삭제"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+            {(form.images ?? []).length === 0 && (
+              <div
+                style={{
+                  fontSize: 12,
+                  color: 'var(--color-text-tertiary)',
+                }}
+              >
+                사진을 등록하면 랜딩 페이지에 실제 이미지로 노출됩니다.
+                (입력하지 않으면 그라데이션 커버가 사용됩니다.)
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="field">

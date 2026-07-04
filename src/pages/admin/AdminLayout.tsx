@@ -46,7 +46,7 @@ export default function AdminLayout() {
               Y
             </span>
             <div>
-              <div style={{ fontWeight: 800 }}>Yukye Design</div>
+              <div style={{ fontWeight: 800 }}>Yukyu Design</div>
               <div style={{ fontSize: 11, color: 'rgba(255,255,255,.7)' }}>
                 Admin Console
               </div>

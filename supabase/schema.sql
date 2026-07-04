@@ -149,6 +149,7 @@ create table if not exists public.portfolio (
   cover_color text not null,
   cover_accent text not null,
   tags text[] not null default '{}',
+  images text[] not null default '{}',
   featured boolean not null default false,
   published boolean not null default true
 );
@@ -216,6 +217,11 @@ drop policy if exists "quotes_delete_admin" on public.quotes;
 create policy "quotes_delete_admin"
   on public.quotes for delete
   using (public.forge_role() = 'authenticated');
+
+-- ----- portfolio.images 컬럼 마이그레이션 -----
+-- 기존 스키마에 images 가 없을 수 있으므로 별도 ALTER 로 안전하게 추가합니다.
+alter table public.portfolio
+  add column if not exists images text[] not null default '{}';
 
 -- ----- progress_updates -----
 -- ⚠️ forge_role() 만 체크하면 누구나 author_role='admin' 으로 위조 가능.

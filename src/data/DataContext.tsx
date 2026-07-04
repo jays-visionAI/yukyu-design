@@ -170,6 +170,7 @@ interface PortfolioRow {
   cover_color: string;
   cover_accent: string;
   tags: string[];
+  images: string[] | null;
   featured: boolean;
   published: boolean;
 }
@@ -217,6 +218,7 @@ function rowToPortfolio(row: PortfolioRow): PortfolioItem {
     coverColor: row.cover_color,
     coverAccent: row.cover_accent,
     tags: row.tags ?? [],
+    images: row.images ?? [],
     featured: row.featured,
     published: row.published,
   };
@@ -696,6 +698,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             cover_color: local.coverColor,
             cover_accent: local.coverAccent,
             tags: local.tags,
+            images: local.images,
             featured: local.featured,
             published: local.published,
           })
@@ -727,6 +730,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         if (patch.description !== undefined) row.description = patch.description;
         if (patch.coverColor !== undefined) row.cover_color = patch.coverColor;
         if (patch.coverAccent !== undefined) row.cover_accent = patch.coverAccent;
+        if (patch.images !== undefined) row.images = patch.images;
         if (patch.tags !== undefined) row.tags = patch.tags;
         if (patch.featured !== undefined) row.featured = patch.featured;
         if (patch.published !== undefined) row.published = patch.published;
@@ -758,7 +762,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [backendMode]
   );
 
-  // ---------- Auth ----------
   const adminLogin: DataContextValue['adminLogin'] = useCallback(
     async (id, pw) => {
       if (backendMode === 'local') {
@@ -769,18 +772,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
         }
         return false;
       }
-      // ForgeDB Auth: 이메일/비밀번호로 로그인 (관리자 계정)
+      // ForgeDB Auth: 이메일/비밀번호로 로그인.
+      // ⚠️ 보안: 자동 signUp 폴백을 제거했습니다 — "누군 먼저 가입하는지에 따라 어드민 권한이
+      // 결정"되는 취약점(누군나 첫 로그인으로 어드미덼 탈취)을 막기 위핸입니다.
+      // 운영 환경에서는 https://forgedb.cloud 콘솔 → Auth → Users 에서 어드미덼 계정을
+      // 미리 생성한 후, 그 자격증명으로만 로그인할 수 있습니다.
       try {
         const fb = getForge();
-        // id 가 이메일이 아니면 도메인을 붙여 정규화
         const email = id.includes('@') ? id : `${id}@yukye.local`;
         const { data, error } = await fb.auth.signInWithPassword({ email, password: pw });
         if (error || !data.session) {
-          // 가입 안 된 경우 자동 signUp 시도 (첫 부팅 편의)
-          const su = await fb.auth.signUp({ email, password: pw });
-          if (su.error || !su.data.session) return false;
-          setIsAdmin(true);
-          return true;
+          console.warn(
+            '[ForgeDB] adminLogin 실패: 콘솔에서 사전에 관리자 계정을 생성했는지 확인하세요.'
+          );
+          return false;
         }
         setIsAdmin(true);
         return true;

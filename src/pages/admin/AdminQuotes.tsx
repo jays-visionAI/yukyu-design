@@ -26,7 +26,7 @@ const STATUS_FILTERS: { value: QuoteStatus | 'all'; label: string }[] = [
 ];
 
 export default function AdminQuotes() {
-  const { quotes, resetData } = useData();
+  const { quotes, resetData, backendMode } = useData();
   const toast = useToast();
   const navigate = useNavigate();
   const { id: routeId } = useParams();
@@ -108,22 +108,68 @@ export default function AdminQuotes() {
         q.additionalRequests ?? '',
       ]),
     ];
-    const csv = rows
-      .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))
-      .join('\n');
+    // Excel 에서 전화번호/접수번호가 자동으로 날짜·숫자로 변환되어 데이터가
+    // 망가지는 것을 막기 위해 텍스트 컬럼은 ="..." 로 감싸 명시적으로 텍스트
+    // 형식임을 표시합니다 (RFC 4180 호환, Excel · LibreOffice · Numbers 모두 인식).
+    const escape = (c: unknown) => {
+      const s = String(c ?? '');
+      return `="${s.replace(/"/g, '""')}"`;
+    };
+    const csv = rows.map((r) => r.map(escape).join(',')).join('\n');
     const blob = new Blob(['\ufeff' + csv], {
       type: 'text/csv;charset=utf-8;',
     });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `yukye_quotes_${formatDate(new Date().toISOString())}.csv`;
+    a.download = `yukyu_quotes_${formatDate(new Date().toISOString())}.csv`;
     a.click();
     URL.revokeObjectURL(url);
     toast.success('CSV 다운로드 완료');
   }
 
-  function clearAll() {
+  async function copyToClipboard(text: string): Promise<boolean> {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch {
+      /* fallback below */
+    }
+    // Fallback: hidden textarea + execCommand
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+
+  async function clearAll() {
+    if (backendMode === 'forgedb') {
+      const sql =
+        '-- ForgeDB 콘솔 SQL Editor 에서 실행하세요.\n' +
+        '-- 진행 경과와 시공 건을 모두 삭제합니다 (관리자 계정은 유지).\n' +
+        'DELETE FROM public.progress_updates;\n' +
+        'DELETE FROM public.quotes;\n' +
+        '-- 포트폴리오까지 초기화하려면:\n' +
+        '-- DELETE FROM public.portfolio;';
+      const ok = await copyToClipboard(sql);
+      if (ok) {
+        toast.success('초기화용 SQL 을 클립보드에 복사했습니다. 콘솔에 붙여넣으세요.');
+      } else {
+        toast.error('클립보드 복사 실패. 콘솔에서 다음 SQL 을 직접 실행하세요:\n' + sql);
+      }
+      return;
+    }
     if (!confirm('데모 데이터를 초기화합니다. 되돌릴 수 없습니다.')) return;
     resetData();
     toast.success('초기화되었습니다.');
@@ -603,15 +649,29 @@ function Info({
 
 function ContractAmountInput({ quote }: { quote: Quote }) {
   const { updateQuote } = useData();
+  const toast = useToast();
+  // 저장 후 또는 외부(Realtime/다른 세션)에서 contractAmount 가 바뀌면 입력값 초기화.
+  // 단, 사용자가 새 값을 *입력 중*일 때는 입력값을 유지 (덮어쓰기 방지).
   const [val, setVal] = useState('');
+  const [editing, setEditing] = useState(false);
+
+  // 외부(저장/다른 세션/Realtime)로 contractAmount 가 바뀌면 입력값을 비웁니다.
+  // 단, 사용자가 *지금은* 입력 중(editing=true)이라면 입력값을 보존해
+  // 외부 변경으로 작성 중 데이터가 사라지지 않도록 합니다.
+  useEffect(() => {
+    if (!editing) setVal('');
+  }, [quote.contractAmount]);
+
   return (
     <div className="row" style={{ gap: 8 }}>
       <input
         className="input"
         style={{ width: 160 }}
         inputMode="numeric"
-        placeholder="3,200,0000"
+        placeholder={quote.contractAmount ? '' : '3,200,0000'}
         value={val}
+        onFocus={() => setEditing(true)}
+        onBlur={() => setEditing(false)}
         onChange={(e) =>
           setVal(e.target.value.replace(/[^0-9]/g, ''))
         }
@@ -620,13 +680,28 @@ function ContractAmountInput({ quote }: { quote: Quote }) {
         className="btn btn-primary btn-sm"
         onClick={() => {
           const n = parseInt(val, 10);
-          if (!n) return;
+          if (!n) {
+            toast.error('금액을 숫자로 입력해주세요.');
+            return;
+          }
           updateQuote(quote.id, { contractAmount: n });
           setVal('');
+          setEditing(false);
+          toast.success('계약 금액이 저장되었습니다.');
         }}
       >
         저장
       </button>
+      {quote.contractAmount ? (
+        <span
+          style={{
+            fontSize: 12,
+            color: 'var(--color-text-tertiary)',
+          }}
+        >
+          현재 {formatKRW(quote.contractAmount)}
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -746,7 +821,17 @@ function ProgressAddModal({
   );
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
-  const [author, setAuthor] = useState('Yukye Studio');
+  const [author, setAuthor] = useState('');
+
+  // 모달이 닫히면 입력값 reset (다음 열기에서 깨끗하게 시작).
+  useEffect(() => {
+    if (!open) {
+      setTitle('');
+      setMessage('');
+      setAuthor('');
+      setCategory('progress');
+    }
+  }, [open]);
 
   function submit() {
     if (!title.trim()) {
@@ -754,7 +839,7 @@ function ProgressAddModal({
       return;
     }
     addProgressUpdate(quoteId, {
-      authorName: author.trim() || 'Yukye Studio',
+      authorName: author.trim() || 'Yukyu Design',
       authorRole: 'admin',
       category,
       title: title.trim(),
@@ -762,8 +847,6 @@ function ProgressAddModal({
       visibleToCustomer: true,
     });
     toast.success('진행 경과가 추가되었습니다.');
-    setTitle('');
-    setMessage('');
     onClose();
   }
 
@@ -810,7 +893,16 @@ function ProgressAddModal({
           ))}
         </div>
       </div>
-      <div className="field">
+      <div
+        className="field"
+        onKeyDown={(e) => {
+          // Enter 누르면 즉시 추가 (Shift+Enter 는 textarea 의 줄바꿈용).
+          if (e.key === 'Enter' && !(e.target instanceof HTMLTextAreaElement)) {
+            e.preventDefault();
+            submit();
+          }
+        }}
+      >
         <label className="field-label">
           제목<span className="req">*</span>
         </label>
@@ -819,6 +911,7 @@ function ProgressAddModal({
           placeholder="예: 거실 타일 시공 완료"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
+          autoFocus
         />
       </div>
       <div className="field">
@@ -834,9 +927,19 @@ function ProgressAddModal({
         <label className="field-label">작성자</label>
         <input
           className="input"
+          placeholder="Yukyu Design"
           value={author}
           onChange={(e) => setAuthor(e.target.value)}
         />
+        <div
+          style={{
+            fontSize: 12,
+            color: 'var(--color-text-tertiary)',
+            marginTop: 4,
+          }}
+        >
+          비워두면 기본값 "Yukyu Design" 으로 저장됩니다.
+        </div>
       </div>
     </Modal>
   );

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Header, Footer } from '../components/Layout';
 import { useData } from '../data/DataContext';
@@ -20,15 +21,7 @@ export default function Landing() {
             padding: 'var(--space-20) 0',
           }}
         >
-          <div
-            className="container"
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1.2fr 1fr',
-              gap: 'var(--space-12)',
-              alignItems: 'center',
-            }}
-          >
+          <div className="container hero-grid">
             <div>
               <div
                 style={{
@@ -67,7 +60,7 @@ export default function Landing() {
                   maxWidth: 520,
                 }}
               >
-                Yukye Design은 고객 한 분 한 분의 라이프 스타일에 맞춘
+                Yukyu Design은 고객 한 분 한 분의 라이프 스타일에 맞춘
                 인테리어 시공을 제안합니다. 2분이면 견적 신청이 끝나고,
                 신청 내역은 실시간으로 공유됩니다.
               </p>
@@ -116,7 +109,7 @@ export default function Landing() {
                     letterSpacing: '0.08em',
                   }}
                 >
-                  WHY YUKYE
+                  WHY YUKYU
                 </p>
                 <h2
                   style={{
@@ -129,11 +122,7 @@ export default function Landing() {
               </div>
             </div>
             <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
-                gap: 'var(--space-6)',
-              }}
+              className="cards-3"
             >
               <Feature
                 title="실시간 진행 공유"
@@ -170,13 +159,7 @@ export default function Landing() {
                 견적 문의 →
               </Link>
             </div>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
-                gap: 'var(--space-5)',
-              }}
-            >
+            <div className="cards-3">
               {featured.map((p) => (
                 <article
                   key={p.id}
@@ -190,16 +173,36 @@ export default function Landing() {
                 >
                   <div
                     style={{
-                      height: 200,
-                      background: `linear-gradient(135deg, ${p.coverColor} 0%, ${p.coverAccent} 140%)`,
+                      height: 220,
+                      background: p.images && p.images.length > 0
+                        ? `url(${p.images[0]}) center/cover no-repeat`
+                        : `linear-gradient(135deg, ${p.coverColor} 0%, ${p.coverAccent} 140%)`,
                       display: 'flex',
                       alignItems: 'flex-end',
                       padding: 18,
+                      position: 'relative',
                     }}
                   >
+                    {p.images && p.images.length > 1 && (
+                      <span
+                        style={{
+                          position: 'absolute',
+                          top: 12,
+                          right: 12,
+                          background: 'rgba(0,0,0,0.55)',
+                          color: '#fff',
+                          padding: '4px 10px',
+                          borderRadius: 999,
+                          fontSize: 11,
+                          backdropFilter: 'blur(6px)',
+                        }}
+                      >
+                        +{p.images.length - 1}장
+                      </span>
+                    )}
                     <span
                       style={{
-                        background: 'rgba(0,0,0,0.25)',
+                        background: 'rgba(0,0,0,0.45)',
                         color: '#fff',
                         padding: '4px 10px',
                         borderRadius: 999,
@@ -347,7 +350,67 @@ function Feature({
   );
 }
 
+// ============================================================
+//  히어로 슬라이드쇼 (4장 인테리어 사진 · 3초 간격 자동 전환
+//  + Ken Burns 슬로우 줌인 효과로 다이나믹한 인상)
+// ============================================================
+const HERO_SLIDES: {
+  src: string;
+  fallback: string;
+  tag: string;
+  title: string;
+  meta: string;
+}[] = [
+  {
+    src: '/assets/hero-1-living.jpg',
+    fallback: 'linear-gradient(135deg, #1f8a55 0%, #4ba87b 50%, #c9a961 100%)',
+    tag: '01 · LIVING ROOM',
+    title: '청담 더 라운지 — 우드 톤과 라운지형 가구로 따뜻한 거실',
+    meta: '2024 · 32평 · 8주',
+  },
+  {
+    src: '/assets/hero-2-dining.jpg',
+    fallback: 'linear-gradient(135deg, #8a6a4a 0%, #b89070 45%, #e8d5b8 100%)',
+    tag: '02 · DINING',
+    title: '한남 다이닝 — 페인티드 우드 테이블과 펜던트 조명이 만드는 결',
+    meta: '2024 · 24평 · 6주',
+  },
+  {
+    src: '/assets/hero-3-kitchen.jpg',
+    fallback: 'linear-gradient(135deg, #2c3e50 0%, #5d6d7e 45%, #cdd5dc 100%)',
+    tag: '03 · KITCHEN',
+    title: '도곡 미니멀 키친 — 화이트 페인트와 브러시드 메탈의 모던함',
+    meta: '2025 · 18평 · 5주',
+  },
+  {
+    src: '/assets/hero-4-bedroom.jpg',
+    fallback: 'linear-gradient(135deg, #6a4a7a 0%, #b07aa8 50%, #f0d9e8 100%)',
+    tag: '04 · BEDROOM',
+    title: '서초 호텔식 침실 — 린넨 월아트와 인디렉트 조명의 휴식처',
+    meta: '2025 · 28평 · 7주',
+  },
+];
+
+const HERO_INTERVAL_MS = 6000;
+// Ken Burns 줌인이 6초 duration 으로 한 컷당 절반만 진행된 채 다음 슬라이드로
+// 교체되어, 시작 부분의 정적 → 중간 줌인 → 다음 컷의 정적 이라는 리듬이 생깁니다.
+// 슬라이드 전환은 crossfade 로 부드럽게 겹쳐집니다.
+
 function HeroVisual() {
+  const [idx, setIdx] = useState(0);
+  const [paused, setPaused] = useState(false);
+
+  useEffect(() => {
+    if (paused) return;
+    const id = window.setInterval(() => {
+      setIdx((i) => (i + 1) % HERO_SLIDES.length);
+    }, HERO_INTERVAL_MS);
+    return () => window.clearInterval(id);
+  }, [paused]);
+
+  const slide = HERO_SLIDES[idx];
+  const prevSlide = HERO_SLIDES[(idx - 1 + HERO_SLIDES.length) % HERO_SLIDES.length];
+
   return (
     <div
       style={{
@@ -356,17 +419,70 @@ function HeroVisual() {
         borderRadius: 'var(--radius-xl)',
         overflow: 'hidden',
         boxShadow: 'var(--shadow-xl)',
-        background:
-          'linear-gradient(135deg, #1f8a55 0%, #4ba87b 60%, #c9a961 100%)',
+        background: slide.fallback,
+        cursor: 'pointer',
       }}
-      aria-hidden
+      role="region"
+      aria-label="시공 사례 슬라이드쇼"
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onFocus={() => setPaused(true)}
+      onBlur={() => setPaused(false)}
     >
+      {/* 이전 슬라이드 — crossfade out 으로 부드럽게 사라짐 */}
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          inset: 0,
+          overflow: 'hidden',
+          background: prevSlide.fallback,
+          animation: 'hero-crossfade-out 700ms ease-out forwards',
+        }}
+        key={`prev-${idx}`}
+      >
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            backgroundImage: `url(${prevSlide.src})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            transform: 'scale(1.08)',
+            transformOrigin: 'center center',
+          }}
+        />
+      </div>
+      {/* 현재 슬라이드 — Ken Burns 슬로우 줌인 (6초) */}
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          inset: 0,
+          overflow: 'hidden',
+          background: slide.fallback,
+        }}
+        key={`cur-${idx}`}
+      >
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            backgroundImage: `url(${slide.src})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            animation: 'hero-kenburns 6000ms ease-out forwards',
+            transformOrigin: 'center center',
+          }}
+        />
+      </div>
       <div
         style={{
           position: 'absolute',
           inset: 0,
           background:
             'linear-gradient(to bottom, rgba(11,61,145,.0) 30%, rgba(11,61,145,.85))',
+          pointerEvents: 'none',
         }}
       />
       <div
@@ -376,7 +492,9 @@ function HeroVisual() {
           right: 24,
           bottom: 24,
           color: '#fff',
+          animation: 'hero-fadein 600ms ease-out both',
         }}
+        key={`txt-${idx}`}
       >
         <div
           style={{
@@ -384,18 +502,20 @@ function HeroVisual() {
             letterSpacing: '0.08em',
             color: 'var(--color-accent)',
             marginBottom: 6,
+            fontWeight: 700,
           }}
         >
-          FEATURED
+          {slide.tag}
         </div>
         <div
           style={{
             fontSize: 'var(--text-lg)',
             fontWeight: 700,
             lineHeight: 1.3,
+            textShadow: '0 2px 12px rgba(0,0,0,.35)',
           }}
         >
-          청담 더 라운지 — 우드 톤과 라운지형 가구로 따뜻한 거실
+          {slide.title}
         </div>
         <div
           style={{
@@ -406,10 +526,64 @@ function HeroVisual() {
             color: 'rgba(255,255,255,.85)',
           }}
         >
-          <span>2024 · 32평</span>
-          <span>·</span>
-          <span>8주</span>
+          <span>{slide.meta}</span>
         </div>
+      </div>
+
+      {/* 진행 인디케이터 (4 dots) */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 16,
+          right: 16,
+          display: 'flex',
+          gap: 6,
+          zIndex: 2,
+        }}
+        aria-hidden
+      >
+        {HERO_SLIDES.map((_, i) => (
+          <span
+            key={i}
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              background:
+                i === idx
+                  ? 'var(--color-accent)'
+                  : 'rgba(255,255,255,.35)',
+              transition: 'background 240ms ease',
+            }}
+          />
+        ))}
+      </div>
+
+      {/* 하단 progress bar — 현재 슬라이드의 경과 시간을 시각화 */}
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: 3,
+          background: 'rgba(255,255,255,.18)',
+          zIndex: 2,
+        }}
+      >
+        <div
+          key={`bar-${idx}-${paused ? 'p' : 'r'}`}
+          style={{
+            height: '100%',
+            width: paused ? '0%' : '100%',
+            transformOrigin: 'left center',
+            background: 'var(--color-accent)',
+            animation: paused
+              ? undefined
+              : `hero-progressbar ${HERO_INTERVAL_MS}ms linear forwards`,
+          }}
+        />
       </div>
     </div>
   );

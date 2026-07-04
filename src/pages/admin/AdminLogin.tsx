@@ -54,7 +54,7 @@ export default function AdminLogin() {
           </span>
           <div>
             <div style={{ fontWeight: 800, fontSize: 18, color: 'var(--color-primary)' }}>
-              Yukye Design
+              Yukyu Design
             </div>
             <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>
               Admin Console

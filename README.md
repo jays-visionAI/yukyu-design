@@ -1,4 +1,4 @@
-# Yukye Design — 프리미엄 인테리어 시공 플랫폼
+# Yukyu Design — 프리미엄 인테리어 시공 플랫폼
 
 2단계 견적 신청 → 실시간 진행경과 → 만족도 평가까지, 고객과 시공업체를 잇는 풀 사이클 인테리어 플랫폼.
 
@@ -137,4 +137,4 @@ supabase/
 
 ## 라이선스
 
-Proprietary — Yukye Design internal use.
+Proprietary — Yukyu Design internal use.

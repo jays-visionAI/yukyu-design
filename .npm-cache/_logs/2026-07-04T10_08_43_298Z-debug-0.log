@@ -5,10 +5,10 @@
 4 silly config load:file:/Users/sangjaeseo/BlueforgeProjects/yukyu_design/.npmrc
 5 silly config load:file:/Users/sangjaeseo/.npmrc
 6 silly config load:file:/opt/homebrew/etc/npmrc
-7 verbose title npm exec tsc --noEmit --pretty
-8 verbose argv "exec" "--" "tsc" "--noEmit" "--pretty"
-9 verbose logfile logs-max:10 dir:/Users/sangjaeseo/BlueforgeProjects/yukyu_design/.npm-cache/_logs/2026-07-04T09_00_53_130Z-
-10 verbose logfile /Users/sangjaeseo/BlueforgeProjects/yukyu_design/.npm-cache/_logs/2026-07-04T09_00_53_130Z-debug-0.log
+7 verbose title npm exec tsc --noEmit
+8 verbose argv "exec" "--" "tsc" "--noEmit"
+9 verbose logfile logs-max:10 dir:/Users/sangjaeseo/BlueforgeProjects/yukyu_design/.npm-cache/_logs/2026-07-04T10_08_43_298Z-
+10 verbose logfile /Users/sangjaeseo/BlueforgeProjects/yukyu_design/.npm-cache/_logs/2026-07-04T10_08_43_298Z-debug-0.log
 11 silly logfile start cleaning logs, removing 1 files
 12 silly logfile done cleaning log files
 13 verbose cwd /Users/sangjaeseo/BlueforgeProjects/yukyu_design

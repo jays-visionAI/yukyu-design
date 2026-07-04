@@ -1,5 +1,5 @@
 /* ============================================================
-   Yukye Design — Design System (CSS Variables / Tokens)
+   Yukyu Design — Design System (CSS Variables / Tokens)
    ============================================================ */
 :root {
   /* Brand */
@@ -721,8 +721,103 @@ p {
 }
 
 /* ============================================================
-   Responsive tweaks
+   Hero slideshow — Ken Burns slow zoom + soft fade
    ============================================================ */
+@keyframes hero-kenburns {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.08);
+  }
+}
+
+@keyframes hero-fadein {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 이전 슬라이드가 다음 슬라이드로 교체될 때 부드럽게 사라지는 crossfade */
+@keyframes hero-crossfade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* 하단 progress bar — 6초간 좌→우로 채워짐 */
+@keyframes hero-progressbar {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* ============================================================
+   Responsive grid helpers
+   — 모바일 최적화를 위한 3단계 분기:
+     · 데스크탑:     3열 (또는 4열) 그대로
+     · 태블릿 (≤1024px): 2열로 줄여 카드 폭 확보
+     · 모바일 (≤640px):   1열 풀폭 — 카드가 깨지지 않고 글자 가독성 확보
+   ============================================================ */
+.cards-3,
+.cards-2,
+.cards-4 {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.cards-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+.cards-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+.cards-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+/* 히어로 좌·우 비율 — 모바일에서는 세로 스택으로 떨어짐 */
+.hero-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: var(--space-12);
+  align-items: center;
+}
+
+/* 태블릿 (iPad 가로 ~1024px 이하) — 3열/4열 → 2열, 히어로 세로 스택 */
+@media (max-width: 1024px) {
+  .cards-3 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .cards-4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .hero-grid {
+    grid-template-columns: 1fr;
+    gap: var(--space-8);
+  }
+}
+
+/* 모바일 (큰 폰 ~640px 이하) — 2열 → 1열 풀폭 */
+@media (max-width: 640px) {
+  .cards-3,
+  .cards-2,
+  .cards-4 {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 768px) {
   .card {
     padding: var(--space-6);

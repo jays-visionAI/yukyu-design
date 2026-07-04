@@ -6,7 +6,7 @@
 //  · 사업자등록번호 형식 검증, 필수 항목 검증, 동의 항목 검증
 // ============================================================
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Header, Footer } from '../../components/Layout';
 import { usePartner } from '../../data/PartnerContext';
@@ -24,6 +24,12 @@ import {
 import { useToast } from '../../components/Toast';
 
 type Step = 1 | 2 | 3;
+
+// 사용자가 페이지를 떠났다가 돌아와도 임시로 입력값을 복구하기 위한 키.
+// 제출 성공 시 제거. 로컬스토리지가 아닌 세션스토리지를 쓰는 이유는
+// 브라우저 탭을 닫으면 사라져서 (1) 민감한 사업자 정보가 디스크에 남지 않고,
+// (2) 다음 방문 시 새 신청으로 깨끗하게 시작하기 위함.
+const DRAFT_KEY = 'yukye_design_partner_draft_v1';
 
 const BUSINESS_TYPE_OPTIONS: PartnerBusinessType[] = [
   'interior_design',
@@ -64,9 +70,81 @@ export default function PartnerApply() {
 
   const [step, setStep] = useState<Step>(1);
   const [draft, setDraft] = useState(() => emptyPartnerDraft());
+  const [restored, setRestored] = useState<boolean>(false);
+  const skipPersistRef = useRef<boolean>(false);
+
+  // ---------- 임시 저장 / 복구 ----------
+  // 마운트 시 sessionStorage 에 저장된 draft 가 있으면 사용자에게 알리고 복구.
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(DRAFT_KEY);
+      if (!raw) {
+        setRestored(true);
+        return;
+      }
+      const parsed = JSON.parse(raw) as Omit<
+        PartnerApplication,
+        'id' | 'createdAt' | 'updatedAt' | 'status'
+      >;
+      // 최소한의 형태 검증 (business 객체가 있는지로 빠르게)
+      if (parsed && typeof parsed === 'object' && parsed.business) {
+        skipPersistRef.current = true; // 복구한 값을 곧바로 다시 저장하지 않게
+        setDraft(parsed);
+        setRestored(true);
+        toast.push('이전에 작성 중이던 내용이 복구되었습니다.');
+      } else {
+        setRestored(true);
+      }
+    } catch {
+      setRestored(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 입력 변경 시 자동 저장. restored=false 일 때는 아직 복구 시도 전이므로 무시.
+  useEffect(() => {
+    if (!restored) return;
+    if (skipPersistRef.current) {
+      skipPersistRef.current = false;
+      return;
+    }
+    try {
+      sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    } catch {
+      /* quota — 무시 */
+    }
+  }, [draft, restored]);
 
   const updateBusiness = (patch: Partial<PartnerBusinessInfo>) =>
     setDraft((d) => ({ ...d, business: { ...d.business, ...patch } }));
+
+  // 사업자등록번호를 000-00-00000 형태로 자동 포맷팅 (사용자 입력 편의성).
+  // 검증 로직은 숫자만 비교하므로 하이픈 포함/미포함 모두 통과합니다.
+  const formatBusinessNumber = (raw: string): string => {
+    const digits = raw.replace(/[^0-9]/g, '').slice(0, 10);
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 5) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+    return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`;
+  };
+
+  // 한국 전화번호 자동 하이픈 포맷팅 (휴대폰·지역번호-국번호-번호).
+  // 숫자만 추출해 10~11자리에 맞춰 그룹핑합니다.
+  const formatPhoneNumber = (raw: string): string => {
+    const digits = raw.replace(/[^0-9]/g, '').slice(0, 11);
+    if (digits.length === 0) return '';
+    if (digits.startsWith('02')) {
+      // 서울 지역번호 (02-XXX-XXXX 또는 02-XXXX-XXXX)
+      if (digits.length <= 2) return digits;
+      if (digits.length <= 5) return `${digits.slice(0, 2)}-${digits.slice(2)}`;
+      if (digits.length <= 9)
+        return `${digits.slice(0, 2)}-${digits.slice(2, digits.length - 4)}-${digits.slice(-4)}`;
+      return `${digits.slice(0, 2)}-${digits.slice(2, 6)}-${digits.slice(6)}`;
+    }
+    // 휴대폰 / 기타 (010·011·016·017·018·019 / 031·032·...)
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+    return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
+  };
 
   const updateCase = (idx: number, patch: Partial<PartnerCase>) =>
     setDraft((d) => ({
@@ -230,6 +308,12 @@ export default function PartnerApply() {
       return;
     }
     const app = submitApplication(draft);
+    // 제출 성공 → 임시 저장본 제거 (다음 방문은 새 신청으로 시작)
+    try {
+      sessionStorage.removeItem(DRAFT_KEY);
+    } catch {
+      /* ignore */
+    }
     // 완료 페이지로 이동하며 id 전달
     navigate(`/partner/done?id=${encodeURIComponent(app.id)}`);
   };
@@ -281,6 +365,12 @@ export default function PartnerApply() {
               business={draft.business}
               errors={businessErrors}
               onChange={updateBusiness}
+              onBusinessNumberChange={(v) =>
+                updateBusiness({ businessNumber: formatBusinessNumber(v) })
+              }
+              onContactPhoneChange={(v) =>
+                updateBusiness({ contactPhone: formatPhoneNumber(v) })
+              }
             />
           )}
 
@@ -396,10 +486,14 @@ function StepBusinessInfo({
   business,
   errors,
   onChange,
+  onBusinessNumberChange,
+  onContactPhoneChange,
 }: {
   business: PartnerBusinessInfo;
   errors: Record<string, string>;
   onChange: (patch: Partial<PartnerBusinessInfo>) => void;
+  onBusinessNumberChange: (raw: string) => void;
+  onContactPhoneChange: (raw: string) => void;
 }) {
   return (
     <div className="card stack" style={{ gap: 24 }}>
@@ -428,9 +522,10 @@ function StepBusinessInfo({
             <input
               className="input"
               value={business.businessNumber}
-              onChange={(e) => onChange({ businessNumber: e.target.value })}
+              onChange={(e) => onBusinessNumberChange(e.target.value)}
               placeholder="000-00-00000"
               inputMode="numeric"
+              maxLength={12}
             />
           }
         />
@@ -532,9 +627,10 @@ function StepBusinessInfo({
             <input
               className="input"
               value={business.contactPhone}
-              onChange={(e) => onChange({ contactPhone: e.target.value })}
+              onChange={(e) => onContactPhoneChange(e.target.value)}
               placeholder="010-1234-5678"
               inputMode="tel"
+              maxLength={13}
             />
           }
         />

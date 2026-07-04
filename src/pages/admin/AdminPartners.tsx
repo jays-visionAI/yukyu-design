@@ -8,7 +8,8 @@
 //  · PII 마스킹 해제 (관리자 권한)
 // ============================================================
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import Modal from '../../components/Modal';
 import { useToast } from '../../components/Toast';
 import { usePartner } from '../../data/PartnerContext';
@@ -41,9 +42,34 @@ export default function AdminPartners() {
     usePartner();
   const toast = useToast();
 
+  const [searchParams, setSearchParams] = useSearchParams();
   const [tab, setTab] = useState<TabKey>('all');
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<PartnerApplication | null>(null);
+
+  // URL 의 ?id= 와 모달 상태 동기화
+  // - hydrate 끝난 뒤 ?id= 가 가리키는 신청을 찾아 모달 오픈
+  // - 모달 닫을 때 ?id= 쿼리 제거 (히스토리 더럽히지 않음)
+  useEffect(() => {
+    if (!isReady) return;
+    const id = searchParams.get('id');
+    if (!id) {
+      // 쿼리 없으면 모달도 닫힌 상태로 동기화 (뒤로가기로 돌아왔을 때 대비)
+      setSelected((cur) => (cur ? null : cur));
+      return;
+    }
+    const found = applications.find((a) => a.id === id);
+    if (found) setSelected(found);
+  }, [isReady, searchParams, applications]);
+
+  const closeModal = useCallback(() => {
+    setSelected(null);
+    const next = new URLSearchParams(searchParams);
+    if (next.has('id')) {
+      next.delete('id');
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const filtered = useMemo(() => {
     let list = applications;
@@ -245,7 +271,7 @@ export default function AdminPartners() {
       {/* 상세 모달 */}
       <PartnerDetailModal
         app={selected}
-        onClose={() => setSelected(null)}
+        onClose={closeModal}
         onUpdateStatus={(status, memo) => {
           if (!selected) return;
           updateApplicationStatus(selected.id, status, { adminMemo: memo });

@@ -11,6 +11,27 @@
 - (예정) 자동 배포 파이프라인 (요청 시 활성화)
 - (예정) Dependabot / CodeQL 자동 점검
 
+## 2026-07 · 협력업체 파트너 신청 기능
+
+### Added
+- 인테리어·시공 협력업체 등록 신청 기능 (`/partner/apply`)
+ - 3단계 폼: 사업자정보 → 시공 사례 + 실적 → 동의 및 제출
+ - 사업자등록번호 자동 하이픈 포맷팅, 한국 전화번호 자동 포맷팅
+ - 작성 중 입력값 자동 저장 → 새로고침/재방문 시 sessionStorage 복구 (제출 성공 시 자동 삭제)
+ - 신청 결과는 이메일 안내 (RLS: anon SELECT 차단)
+- 관리자 파트너 신청 관리 콘솔 (`/admin/partners`)
+ - 상태 탭 (전체 / 접수됨 / 검토중 / 승인 / 반려) · 검색 · 상세 모달
+ - 모달을 URL `?id=` 쿼리로 딥링크 가능 (다른 탭/세션에서 직접 열기)
+ - 승인/반려 처리 (관리자 코멘트, 처리일시 자동 기록)
+ - 사이드바 "파트너 신청" 메뉴에 미처리 카운트 뱃지
+- 푸터에 "협력업체 모집" 블록 + 신청 버튼, 상단 헤더에 "파트너 등록" 메뉴
+- `supabase/schema.sql` 에 `partner_applications` 테이블 + RLS (anon INSERT only / admin SELECT·UPDATE·DELETE) + 인덱스 + Realtime publication 등록
+
+### Notes
+- 일반 고객은 신청만 가능하고 신청 결과를 조회할 수 없습니다 (RLS 정책상 anon SELECT 차단). 결과는 이메일로만 통보.
+
+---
+
 ## 2026-07 · 푸터 · SEO · GitHub 인프라
 
 ### Changed

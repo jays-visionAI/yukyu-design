@@ -63,6 +63,7 @@ VITE_FORGEDB_ANON_KEY=your_anon_key
 | `progress_updates` | INSERT (`author_role IN ('customer','system')` + `visible_to_customer=true`) + SELECT (visible) | ALL |
 | `portfolio` | SELECT (published=true) | ALL |
 | `progress_attachments` | INSERT + SELECT | ALL |
+| `partner_applications` | **INSERT 만** (신청 등록 후 SELECT 불가, 결과는 이메일 통보) | ALL |
 
 ### 고객 추적 토큰 (`share_token`)
 
@@ -120,7 +121,8 @@ supabase/
 ## 핵심 기능
 
 - **고객 영역**: 2단계 견적 폼 → 세션 자동 저장 → 진행경과 추적 → 사진·증빙 업로드 → 완료 시 별점 평가
-- **관리자 콘솔**: KPI 대시보드 (SVG 차트) · 접수 관리 (메모·상태·CSV) · 포트폴리오 CRUD · 리뷰 집계
+- **관리자 콘솔**: KPI 대시보드 (SVG 차트) · 접수 관리 (메모·상태·CSV) · 포트폴리오 CRUD · 리뷰 집계 · 트래픽 분석 (시간/주/월/분기 버킷 · 채널 · 디바이스 · UTM) · SEO 설정 (메타·JSON-LD·sitemap·robots)
+- **파트너 신청** (`/partner/apply`): 인테리어·시공 협력업체 등록 3단계 폼 (사업자정보 → 시공사례·실적 → 동의). 자동 하이픈 포맷팅·작성 중 세션 복구·일반 고객은 신청만 가능 (조회 불가). 관리자 콘솔 (`/admin/partners`) 에서 상태 탭(접수/검토/승인/반려)·검색·상세 모달(URL 딥링크)·승인/반려 처리.
 - **타입 안전성**: 모든 도메인 모델에 TypeScript strict 적용
 - **반응형**: 모바일 / 태블릿 / 데스크탑 대응
 - **외부 UI 라이브러리 0**: 모달·스테퍼·차트·별점 모두 자체 구현

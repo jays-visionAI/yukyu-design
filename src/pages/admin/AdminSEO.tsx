@@ -15,7 +15,22 @@ export default function AdminSEO() {
   const [tab, setTab] = useState<Tab>('overview');
   const [draft, setDraft] = useState<SeoSettings>(seo);
 
-  useEffect(() => setDraft(seo), [seo]);
+  // seo 참조는 saveSeo/실시간 구독/이벤트 추적 등으로 매 렌더마다
+  // 새 객체가 들어오지만, 실제 사용자 편집 내용이 들어 있을 때는
+  // draft 를 덮어쓰면 안 된다. updatedAt 같은 메타 필드가 흔들려도
+  // "내용이 바뀐 경우에만" 동기화하도록 문자열 시그니처로 비교한다.
+  const seoSignature = useMemo(
+    () => JSON.stringify({ ...seo, updatedAt: '' }),
+    [seo]
+  );
+  useEffect(() => setDraft(seo), [seoSignature]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // updatedAt 을 제외한 본문 시그니처로만 비교 → 1초 단위 메타 갱신에
+  // 흔들려도 dirty 가 토글되지 않는다.
+  const dirty = useMemo(
+    () => JSON.stringify({ ...draft, updatedAt: '' }) !== seoSignature,
+    [draft, seoSignature]
+  );
 
   function apply() {
     saveSeo(draft);
@@ -46,7 +61,7 @@ export default function AdminSEO() {
             type="button"
             className="btn btn-primary btn-sm"
             onClick={apply}
-            disabled={!isDirty(draft, seo)}
+            disabled={!dirty}
           >
             저장
           </button>
@@ -104,10 +119,6 @@ export default function AdminSEO() {
       {tab === 'tracking' && <TrackingIds seo={draft} setDraft={setDraft} />}
     </div>
   );
-}
-
-function isDirty(a: SeoSettings, b: SeoSettings) {
-  return JSON.stringify(a) !== JSON.stringify(b);
 }
 
 // ============================================================

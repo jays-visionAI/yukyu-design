@@ -1,0 +1,44 @@
+# 라벨 정책 (참고용 안내 — GitHub 라벨은 repo Settings 에서 별도 등록)
+#
+# 이 프로젝트는 외부 라벨 자동 부착 시스템이 없으므로, 아래 명세를 권장 가이드로만 사용합니다.
+# 라벨 자동 부착이 필요해지면 .github/labeler.yml 을 추가하고 워크플로우와 연결합니다.
+
+- name: bug
+  color: d73a4a
+  description: 동작/UI/성능/보안 결함
+- name: feature
+  color: a2eeef
+  description: 새 기능 요청
+- name: chore
+  color: 7057ff
+  description: 인프라/CI/문서/리팩터
+- name: docs
+  color: 0e8a16
+  description: 문서/주석 개선
+- name: security
+  color: b60205
+  description: 보안 — security@blueforge.kr 로 비공개 제보 권장
+- name: area/admin
+  color: 1d76db
+  description: 어드민 콘솔 영역
+- name: area/public
+  color: 0e8a16
+  description: 고객 영역 (랜딩/견적/추적)
+- name: area/data
+  color: fbca04
+  description: DataContext / ForgeDB / 스키마
+- name: area/design
+  color: c5def5
+  description: 디자인 토큰 / 스타일
+- name: "good first issue"
+  color: 7057ff
+  description: 첫 PR 추천 — 가이드 따라 손쉽게 해결 가능
+- name: "help wanted"
+  color: 008672
+  description: 외부 기여 환영
+- name: "blocked"
+  color: ee0701
+  description: 외부 의존성으로 진행 불가
+- name: wontfix
+  color: ffffff
+  description: 의도적으로 처리하지 않음

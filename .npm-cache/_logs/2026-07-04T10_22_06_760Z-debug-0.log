@@ -18,20 +18,20 @@
 17 timing npm:load:configload Completed in 5ms
 18 timing npm:load:mkdirpcache Completed in 0ms
 19 timing npm:load:mkdirplogs Completed in 0ms
-20 verbose title npm exec tsc -b
-21 verbose argv "exec" "--" "tsc" "-b"
+20 verbose title npm exec tsc --noEmit
+21 verbose argv "exec" "--" "tsc" "--noEmit"
 22 timing npm:load:setTitle Completed in 11ms
 23 timing config:load:flatten Completed in 2ms
 24 timing npm:load:display Completed in 3ms
-25 verbose logfile logs-max:10 dir:/Users/sangjaeseo/BlueforgeProjects/yukyu_design/.npm-cache/_logs/2026-07-04T09_30_27_448Z-
-26 verbose logfile /Users/sangjaeseo/BlueforgeProjects/yukyu_design/.npm-cache/_logs/2026-07-04T09_30_27_448Z-debug-0.log
-27 timing npm:load:logFile Completed in 4ms
+25 verbose logfile logs-max:10 dir:/Users/sangjaeseo/BlueforgeProjects/yukyu_design/.npm-cache/_logs/2026-07-04T10_22_06_760Z-
+26 verbose logfile /Users/sangjaeseo/BlueforgeProjects/yukyu_design/.npm-cache/_logs/2026-07-04T10_22_06_760Z-debug-0.log
+27 timing npm:load:logFile Completed in 5ms
 28 timing npm:load:timers Completed in 0ms
-29 timing npm:load:configScope Completed in 1ms
+29 timing npm:load:configScope Completed in 0ms
 30 timing npm:load Completed in 25ms
 31 silly logfile start cleaning logs, removing 1 files
 32 silly logfile done cleaning log files
-33 timing command:exec Completed in 1460ms
+33 timing command:exec Completed in 2295ms
 34 verbose exit 0
-35 timing npm Completed in 1611ms
+35 timing npm Completed in 2458ms
 36 info ok

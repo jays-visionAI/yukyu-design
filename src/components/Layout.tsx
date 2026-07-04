@@ -52,8 +52,8 @@ export function Footer() {
         </div>
         <div style={{ display: 'flex', gap: 48, flexWrap: 'wrap' }}>
           <div>
-            <strong>Yukyu Design</strong>
-            <p style={{ marginTop: 8 }}>서울 강남구 청담동 123-45 2층</p>
+            <strong>Blueforge D&amp;I 사업부</strong>
+            <p style={{ marginTop: 8 }}>서울시 종로구 종로1길 50 더케이트윈타워 B동 2층</p>
             <p>평일 10:00 - 18:00 · 점심 12:30 - 13:30</p>
           </div>
           <div>

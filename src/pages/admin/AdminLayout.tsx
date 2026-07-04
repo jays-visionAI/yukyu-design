@@ -1,13 +1,18 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useData } from '../../data/DataContext';
+import { useAnalytics } from '../../data/AnalyticsContext';
 import { useToast } from '../../components/Toast';
 
 export default function AdminLayout() {
   const { adminLogout, quotes, backendMode } = useData();
+  const { events } = useAnalytics();
   const navigate = useNavigate();
   const toast = useToast();
 
   const newCount = quotes.filter((q) => q.status === 'received').length;
+  // 최근 24시간 트래픽 (헤더 미니 위젯 용도)
+  const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
+  const todayPv = events.filter((e) => +new Date(e.at) >= dayAgo).length;
 
   function logout() {
     adminLogout();
@@ -55,11 +60,43 @@ export default function AdminLayout() {
         </div>
         <nav style={{ padding: 16, flex: 1 }}>
           <SidebarLink to="/admin/dashboard">대시보드</SidebarLink>
+          <SidebarLink to="/admin/analytics">
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              트래픽 분석
+              {todayPv > 0 && (
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    padding: '1px 6px',
+                    borderRadius: 999,
+                    background: 'rgba(255,255,255,.18)',
+                    color: '#fff',
+                  }}
+                >
+                  {todayPv}
+                </span>
+              )}
+            </span>
+          </SidebarLink>
           <SidebarLink to="/admin/quotes" badge={newCount}>
             접수 관리
           </SidebarLink>
           <SidebarLink to="/admin/portfolio">포트폴리오</SidebarLink>
           <SidebarLink to="/admin/reviews">고객 평가</SidebarLink>
+          <div
+            style={{
+              margin: '12px 8px 4px',
+              fontSize: 11,
+              fontWeight: 600,
+              color: 'rgba(255,255,255,.4)',
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+            }}
+          >
+            설정
+          </div>
+          <SidebarLink to="/admin/seo">SEO 설정</SidebarLink>
         </nav>
         <div style={{ padding: 16, borderTop: '1px solid rgba(255,255,255,.1)' }}>
           <div

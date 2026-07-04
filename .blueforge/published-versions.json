@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": 2,
+      "url": "https://yukyu-design-v2.forgedb.app",
+      "commit": "c007c66",
+      "forgedbProjectId": "3f3f0513-cdc1-4bd4-83e0-d958696227c7",
+      "createdAt": "2026-07-04T10:10:50.086Z"
+    },
+    {
       "version": 1,
       "url": "https://yukyu-design-v1.forgedb.app",
       "commit": "a9a952f",

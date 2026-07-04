@@ -2,27 +2,27 @@
   "version": 1,
   "projectId": "",
   "createdAt": "2026-07-04T08:21:00.860Z",
-  "lastUpdatedAt": "2026-07-04T10:06:35.451Z",
+  "lastUpdatedAt": "2026-07-04T10:35:55.867Z",
   "decisions": [
     {
       "type": "general",
       "title": "User request: 나는 Yukye Design 인테리어 업체를 운영할거야\n\n고객은 자신이 원하는 인테리어 시공 정보를 제공하고 등록하는 방식이야.\n유저가 제공하는",
       "description": "나는 Yukye Design 인테리어 업체를 운영할거야\n\n고객은 자신이 원하는 인테리어 시공 정보를 제공하고 등록하는 방식이야.\n유저가 제공하는 정보는 첫번째, 두번째 스크린샷에 제공하는 정보를 받을거야.\n\n이 고객이 제공한 정보는 Admin에서 접수된 고객의 요청을 볼 수 있고.\n\n세번째 스크린샷이 고객이 접수한 정보를 보는 화면이야.\n\n네번째 다섯번째 스크린샷은 포트폴리오 등록화면이야.\n\n이것을 기본 골자로 훨씬 뛰어난 SOTA급 사이트를 개발할 수 있도록 구현계획서를 상세하게 만들어줘",
-      "status": "pending",
+      "status": "completed",
       "source": "user",
       "id": "d-1783153260861-830q",
       "createdAt": "2026-07-04T08:21:00.861Z",
-      "updatedAt": "2026-07-04T08:21:00.861Z"
+      "updatedAt": "2026-07-04T10:24:16.352Z"
     },
     {
       "type": "general",
       "title": "User request: 고객에게 프로젝트 진행경과를 공유하는 기능도 추가해줘. 중간에 공사과정을 고객이 이해하고 증빙자료를 입력하고 업로드하는 기능이 필요해. \n공사완",
       "description": "고객에게 프로젝트 진행경과를 공유하는 기능도 추가해줘. 중간에 공사과정을 고객이 이해하고 증빙자료를 입력하고 업로드하는 기능이 필요해. \n공사완료 후 고객의 만족도를 입력하고 별점을 올리는 기능도 추가해줘\n\n상기내용을 포함해서 구현을 시작하자.",
-      "status": "pending",
+      "status": "completed",
       "source": "user",
       "id": "d-1783153737398-qr3z",
       "createdAt": "2026-07-04T08:28:57.398Z",
-      "updatedAt": "2026-07-04T08:28:57.398Z"
+      "updatedAt": "2026-07-04T10:35:55.716Z"
     },
     {
       "type": "general",
@@ -214,6 +214,36 @@
       "id": "d-1783159594659-yop1",
       "createdAt": "2026-07-04T10:06:34.659Z",
       "updatedAt": "2026-07-04T10:06:34.659Z"
+    },
+    {
+      "type": "general",
+      "title": "User request: 어드민에서 SEO최적화를 할 수 있는 기능을 추가하고. 고객이 유입되는 경로 채널등을 분석하고 , 일/주/월/분기 단위로 접속자 및 방문자관련 ",
+      "description": "어드민에서 SEO최적화를 할 수 있는 기능을 추가하고. 고객이 유입되는 경로 채널등을 분석하고 , 일/주/월/분기 단위로 접속자 및 방문자관련 데이터를 더 정교하게 볼 수 있게 만들어줘",
+      "status": "pending",
+      "source": "user",
+      "id": "d-1783160174001-hlrd",
+      "createdAt": "2026-07-04T10:16:14.001Z",
+      "updatedAt": "2026-07-04T10:16:14.001Z"
+    },
+    {
+      "type": "general",
+      "title": "User request: 사이트 하단에 회사정보 수정해줘. Blueforge D&I 사업부\n서울시 종로구 종로1길 50 더케이트윈타워 B동 2층\n\n으로 수정해줘",
+      "description": "사이트 하단에 회사정보 수정해줘. Blueforge D&I 사업부\n서울시 종로구 종로1길 50 더케이트윈타워 B동 2층\n\n으로 수정해줘",
+      "status": "pending",
+      "source": "user",
+      "id": "d-1783160654909-26zm",
+      "createdAt": "2026-07-04T10:24:14.909Z",
+      "updatedAt": "2026-07-04T10:24:14.909Z"
+    },
+    {
+      "type": "general",
+      "title": "User request: 사이트 하단에 회사정보 수정해줘. Blueforge D&I 사업부\n서울시 종로구 종로1길 50 더케이트윈타워 B동 2층\n\n으로 수정해줘",
+      "description": "사이트 하단에 회사정보 수정해줘. Blueforge D&I 사업부\n서울시 종로구 종로1길 50 더케이트윈타워 B동 2층\n\n으로 수정해줘",
+      "status": "pending",
+      "source": "user",
+      "id": "d-1783161353861-3spb",
+      "createdAt": "2026-07-04T10:35:53.861Z",
+      "updatedAt": "2026-07-04T10:35:53.861Z"
     }
   ],
   "stageHistory": [

@@ -676,6 +676,45 @@ p {
 }
 
 /* ============================================================
+   Partner Cards (AdminPartners 모바일 폴백)
+   ------------------------------------------------------------
+   데스크톱에서는 숨기고 테이블(.partner-table-desktop)만 노출,
+   모바일(<768px)에서는 카드를 노출하고 테이블을 숨김.
+   ============================================================ */
+.partner-cards {
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+}
+.partner-card {
+  width: 100%;
+  text-align: left;
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  font: inherit;
+  color: inherit;
+}
+.partner-card:hover,
+.partner-card:focus-visible {
+  border-color: var(--color-primary);
+  background: var(--color-bg-muted);
+  outline: none;
+}
+
+@media (max-width: 768px) {
+  .partner-cards {
+    display: flex;
+  }
+  .partner-table-desktop {
+    display: none;
+  }
+}
+
+/* ============================================================
    Star Rating
    ============================================================ */
 .star {

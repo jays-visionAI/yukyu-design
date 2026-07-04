@@ -58,7 +58,7 @@ export default function PartnerDone() {
             담당자가 영업일 기준 2~3일 내에 검토 후 이메일로 결과를 안내드립니다.
           </p>
 
-          {app && (
+          {app ? (
             <div
               style={{
                 textAlign: 'left',
@@ -94,7 +94,28 @@ export default function PartnerDone() {
                 ]}
               />
             </div>
-          )}
+          ) : id ? (
+            // id 쿼리가 있는데 localStorage / ForgeDB 어느 쪽에서도 못 찾은 경우
+            // (예: 다른 브라우저로 옮겨탔거나, ForgeDB 모드에서는 anon SELECT 차단됨).
+            <div
+              style={{
+                padding: 16,
+                borderRadius: 'var(--radius-md)',
+                background: 'var(--color-bg-muted)',
+                color: 'var(--color-text-secondary)',
+                fontSize: 14,
+                marginBottom: 24,
+                textAlign: 'left',
+              }}
+            >
+              <strong>ℹ️ 접수 정보를 찾을 수 없어요</strong>
+              <p style={{ marginTop: 6, lineHeight: 1.7 }}>
+                신청 상세는 보안 정책상 본 브라우저의 임시 저장소에서만 확인할 수 있습니다.
+                다른 기기·시크릿 창 등에서 열었거나 브라우저 저장소를 비우셨다면
+                아래의 안내 사항을 참고해 주세요.
+              </p>
+            </div>
+          ) : null}
 
           <div
             style={{
@@ -112,7 +133,7 @@ export default function PartnerDone() {
               <li>신청 후 영업일 기준 2~3일 내 담당자가 연락드립니다.</li>
               <li>승인 완료 시 별도의 파트너 가이드·정산 계좌 정보를 이메일로 발송합니다.</li>
               <li>
-                신청 내용 수정은 등록하신 이메일(<strong>{maskEmail(app?.business.contactEmail ?? '')}</strong>)로 회신 요청 시
+                신청 내용 수정은 등록하신 이메일(<strong>{app ? maskEmail(app.business.contactEmail) : '등록하신 이메일'}</strong>)로 회신 요청 시
                 가능합니다.
               </li>
             </ul>

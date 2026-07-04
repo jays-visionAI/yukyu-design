@@ -225,7 +225,83 @@ export default function AdminPartners() {
           {tab === 'all' ? '아직 접수된 신청이 없습니다.' : '해당 상태의 신청이 없습니다.'}
         </div>
       ) : (
-        <div className="table-wrap">
+        <>
+        {/* 모바일 카드 리스트 — 작은 화면에서 테이블 대신 1열 카드로 표시 */}
+        <div className="partner-cards" aria-label="파트너 신청 목록">
+          {filtered.map((a) => (
+            <button
+              key={a.id}
+              type="button"
+              onClick={() => setSelected(a)}
+              className="partner-card"
+            >
+              <div className="row-between" style={{ alignItems: 'flex-start', gap: 8 }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 2 }}>
+                    {a.business.companyName}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: 'var(--color-text-tertiary)',
+                    }}
+                  >
+                    {PARTNER_SPECIALTY_LABELS[a.business.businessType]} ·{' '}
+                    {a.business.ceoName}
+                  </div>
+                </div>
+                <StatusBadge status={a.status} />
+              </div>
+              <div
+                style={{
+                  marginTop: 10,
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: 8,
+                  fontSize: 13,
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+                    담당자
+                  </div>
+                  <div>{a.business.contactName || '—'}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+                    연락처
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-family-num)' }}>
+                    {a.business.contactPhone || '—'}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+                    사례 / 누적 실적
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-family-num)' }}>
+                    {a.cases.length}건 / {a.performance.totalProjects}건
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+                    접수일시
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-family-num)' }}>
+                    {new Date(a.createdAt).toLocaleString('ko-KR', {
+                      month: '2-digit',
+                      day: '2-digit',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: false,
+                    })}
+                  </div>
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+        <div className="table-wrap partner-table-desktop">
           <table className="table">
             <thead>
               <tr>
@@ -293,6 +369,7 @@ export default function AdminPartners() {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {/* 상세 모달 */}
@@ -349,10 +426,11 @@ function PartnerDetailModal({
 }) {
   const [memo, setMemo] = useState('');
 
-  // 모달이 다른 신청으로 바뀌면 메모 입력란 동기화
+  // 모달이 다른 신청으로 바뀌거나, 다른 관리자가 같은 신청의 adminMemo
+  // 를 변경하면(Realtime 협업) 메모 입력란이 자동 동기화됩니다.
   useEffect(() => {
     if (app) setMemo(app.adminMemo ?? '');
-  }, [app?.id]);
+  }, [app?.id, app?.adminMemo]);
 
   if (!app) return null;
 

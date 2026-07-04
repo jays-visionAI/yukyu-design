@@ -1,15 +1,21 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useData } from '../../data/DataContext';
 import { useAnalytics } from '../../data/AnalyticsContext';
+import { usePartner } from '../../data/PartnerContext';
 import { useToast } from '../../components/Toast';
 
 export default function AdminLayout() {
   const { adminLogout, quotes, backendMode } = useData();
   const { events } = useAnalytics();
+  const { applications } = usePartner();
   const navigate = useNavigate();
   const toast = useToast();
 
   const newCount = quotes.filter((q) => q.status === 'received').length;
+  // 미처리 파트너 신청 (submitted + reviewing)
+  const partnerNewCount = applications.filter(
+    (a) => a.status === 'submitted' || a.status === 'reviewing'
+  ).length;
   // 최근 24시간 트래픽 (헤더 미니 위젯 용도)
   const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
   const todayPv = events.filter((e) => +new Date(e.at) >= dayAgo).length;
@@ -84,6 +90,9 @@ export default function AdminLayout() {
           </SidebarLink>
           <SidebarLink to="/admin/portfolio">포트폴리오</SidebarLink>
           <SidebarLink to="/admin/reviews">고객 평가</SidebarLink>
+          <SidebarLink to="/admin/partners" badge={partnerNewCount}>
+            파트너 신청
+          </SidebarLink>
           <div
             style={{
               margin: '12px 8px 4px',

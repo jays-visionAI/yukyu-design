@@ -23,6 +23,14 @@ export function Header() {
           >
             홈
           </NavLink>
+          <NavLink
+            to="/partner/apply"
+            className={({ isActive }) =>
+              `btn btn-ghost btn-sm ${isActive ? 'is-active' : ''}`
+            }
+          >
+            파트너 등록
+          </NavLink>
           <NavLink to="/quote" className="btn btn-accent btn-sm">
             견적 문의
           </NavLink>
@@ -60,6 +68,15 @@ export function Footer() {
             <strong>Contact</strong>
             <p style={{ marginTop: 8 }}>02-1234-5678</p>
             <p>hello@yukye.design</p>
+          </div>
+          <div>
+            <strong>협력업체 모집</strong>
+            <p style={{ marginTop: 8 }}>
+              인테리어·시공 파트너를 모집합니다.
+            </p>
+            <NavLink to="/partner/apply" className="btn btn-outline btn-sm">
+              파트너 등록 신청 →
+            </NavLink>
           </div>
         </div>
         <div style={{ width: '100%', color: 'var(--color-text-tertiary)', fontSize: 12 }}>

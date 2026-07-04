@@ -169,6 +169,54 @@ create table if not exists public.progress_attachments (
 create index if not exists idx_progress_attachments_update_id
   on public.progress_attachments(update_id);
 
+-- ============================================================
+--  파트너 신청 (partner_applications)
+--  · 인테리어·시공 협력업체가 등록 신청할 때 사용하는 테이블
+--  · 일반 사용자(anon)는 INSERT 만 가능 — 자기 신청 등록 후 SELECT 불가
+--  · 관리자(authenticated)만 SELECT / UPDATE 가능 — 심사·승인·반려 처리
+--  · 모든 도메인 데이터는 jsonb 컬럼에 통합 저장 (스키마 진화 용이)
+-- ============================================================
+create table if not exists public.partner_applications (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+
+  -- 'submitted' (접수) | 'reviewing' (검토중) | 'approved' (승인) | 'rejected' (반려)
+  status text not null default 'submitted'
+    check (status in ('submitted','reviewing','approved','rejected')),
+
+  -- 사업자/담당자/회사정보 (PartnerBusinessInfo)
+  business jsonb not null,
+  -- 시공 사례 목록 (PartnerCase[])
+  cases jsonb not null default '[]',
+  -- 실적/전문분야 (PartnerPerformance)
+  performance jsonb not null,
+  -- 동의 항목 (PartnerAgreement)
+  agreement jsonb not null,
+
+  -- 신청자 자유 메모
+  note text,
+
+  -- 관리자 코멘트 (반려 사유 등)
+  admin_memo text,
+  -- 처리 일시 (status 가 approved/rejected 로 바뀐 시각)
+  processed_at timestamptz,
+
+  -- (선택) 검증용 — 신청자 이메일을 별도 인덱스 컬럼으로 복제
+  applicant_email text generated always as (
+    (business->'contactEmail')::text
+  ) stored,
+  applicant_company text generated always as (
+    (business->'companyName')::text
+  ) stored
+);
+create index if not exists idx_partner_apps_created_at_desc
+  on public.partner_applications(created_at desc);
+create index if not exists idx_partner_apps_status
+  on public.partner_applications(status);
+create index if not exists idx_partner_apps_applicant_email
+  on public.partner_applications(applicant_email);
+
 -- ---------- 2. RLS (Row Level Security) ----------
 -- ForgeDB 는 anon/authenticated 외의 role 명이 다를 수 있으므로
 -- 모든 정책을 TO PUBLIC 으로 두고 내부에서 forge_role() / forge_uid() 로 분기합니다.
@@ -188,6 +236,7 @@ alter table public.quotes enable row level security;
 alter table public.progress_updates enable row level security;
 alter table public.portfolio enable row level security;
 alter table public.progress_attachments enable row level security;
+alter table public.partner_applications enable row level security;
 
 -- ----- quotes -----
 -- 누구나 등록 가능 (고객 견적 신청). 생성 시 share_token 은 자동 생성됩니다.
@@ -290,6 +339,30 @@ create policy "attachments_write_admin"
   using (public.forge_role() = 'authenticated')
   with check (public.forge_role() = 'authenticated');
 
+-- ----- partner_applications -----
+-- ⚠️ 일반 사용자(anon)는 INSERT 만 가능합니다. 신청 후 결과를 조회할 수 없도록
+-- SELECT 는 관리자(authenticated)만 허용 — 결과는 이메일로만 통보.
+drop policy if exists "partner_insert_public" on public.partner_applications;
+create policy "partner_insert_public"
+  on public.partner_applications for insert
+  with check (true);
+
+drop policy if exists "partner_select_admin" on public.partner_applications;
+create policy "partner_select_admin"
+  on public.partner_applications for select
+  using (public.forge_role() = 'authenticated');
+
+drop policy if exists "partner_update_admin" on public.partner_applications;
+create policy "partner_update_admin"
+  on public.partner_applications for update
+  using (public.forge_role() = 'authenticated')
+  with check (public.forge_role() = 'authenticated');
+
+drop policy if exists "partner_delete_admin" on public.partner_applications;
+create policy "partner_delete_admin"
+  on public.partner_applications for delete
+  using (public.forge_role() = 'authenticated');
+
 -- ===========================================================
 --  3. Realtime 활성화
 --  실시간 구독이 필요한 테이블을 publication 에 추가합니다.
@@ -325,6 +398,12 @@ begin
     where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'portfolio'
   ) then
     execute 'alter publication supabase_realtime add table public.portfolio';
+  end if;
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'partner_applications'
+  ) then
+    execute 'alter publication supabase_realtime add table public.partner_applications';
   end if;
 end $;
 

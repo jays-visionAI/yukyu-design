@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import { DataProvider } from './data/DataContext';
 import { AnalyticsProvider } from './data/AnalyticsContext';
+import { PartnerProvider } from './data/PartnerContext';
 import { ToastProvider } from './components/Toast';
 import './styles/theme.css';
 
@@ -12,9 +13,11 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
     <BrowserRouter>
       <DataProvider>
         <AnalyticsProvider>
-          <ToastProvider>
-            <App />
-          </ToastProvider>
+          <PartnerProvider>
+            <ToastProvider>
+              <App />
+            </ToastProvider>
+          </PartnerProvider>
         </AnalyticsProvider>
       </DataProvider>
     </BrowserRouter>

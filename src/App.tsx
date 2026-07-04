@@ -5,6 +5,8 @@ import QuoteStep1 from './pages/quote/QuoteStep1';
 import QuoteStep2 from './pages/quote/QuoteStep2';
 import QuoteDone from './pages/quote/QuoteDone';
 import QuoteTrack from './pages/quote/QuoteTrack';
+import PartnerApply from './pages/partner/PartnerApply';
+import PartnerDone from './pages/partner/PartnerDone';
 import AdminLogin from './pages/admin/AdminLogin';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminQuotes from './pages/admin/AdminQuotes';
@@ -12,6 +14,7 @@ import AdminPortfolio from './pages/admin/AdminPortfolio';
 import AdminReviews from './pages/admin/AdminReviews';
 import AdminAnalytics from './pages/admin/AdminAnalytics';
 import AdminSEO from './pages/admin/AdminSEO';
+import AdminPartners from './pages/admin/AdminPartners';
 import AdminLayout from './pages/admin/AdminLayout';
 import NotFound from './pages/NotFound';
 import RequireAdmin from './components/RequireAdmin';
@@ -42,6 +45,9 @@ export default function App() {
       <Route path="/quote/done" element={<QuoteDone />} />
       <Route path="/quote/track/:id" element={<QuoteTrack />} />
 
+      <Route path="/partner/apply" element={<PartnerApply />} />
+      <Route path="/partner/done" element={<PartnerDone />} />
+
       <Route path="/admin/login" element={<AdminLogin />} />
       <Route
         path="/admin"
@@ -58,6 +64,7 @@ export default function App() {
         <Route path="quotes/:id" element={<AdminQuotes />} />
         <Route path="portfolio" element={<AdminPortfolio />} />
         <Route path="reviews" element={<AdminReviews />} />
+        <Route path="partners" element={<AdminPartners />} />
         <Route path="seo" element={<AdminSEO />} />
       </Route>
 

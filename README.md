@@ -1,6 +1,15 @@
 # Yukyu Design — 프리미엄 인테리어 시공 플랫폼
 
+[![Stack](https://img.shields.io/badge/Vite-5-646CFF?logo=vite&logoColor=white)](https://vitejs.dev)
+[![Stack](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](https://react.dev)
+[![Stack](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![Stack](https://img.shields.io/badge/ForgeDB-BaaS-0B3D91?logo=postgresql&logoColor=white)](https://forgedb.cloud)
+[![Build](https://img.shields.io/badge/build-passing-22C55E)](#실행)
+[![License](https://img.shields.io/badge/license-Propriary-A1A1AA)](#라이선스)
+
 2단계 견적 신청 → 실시간 진행경과 → 만족도 평가까지, 고객과 시공업체를 잇는 풀 사이클 인테리어 플랫폼.
+
+> **백엔드 두 가지 모드** — 환경변수 유무로 `forgedb` ↔ `local` 자동 전환. 코드 변경 없음.
 
 ## 스택
 - **Vite 5** + **React 18** + **TypeScript (strict)** + **React Router 6**

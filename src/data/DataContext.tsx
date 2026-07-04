@@ -1,0 +1,934 @@
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
+import type {
+  CustomerReview,
+  ProgressAttachment,
+  ProgressUpdate,
+  Quote,
+  QuoteStatus,
+  SpaceType,
+} from './types';
+import type { PortfolioItem } from './portfolio';
+import { seedQuotes, seedPortfolio } from './seed';
+import { getForge, isForgeConfigured } from './forgeClient';
+
+const LS_KEY = 'yukye_design_state_v1';
+
+export interface AppState {
+  quotes: Quote[];
+  portfolio: PortfolioItem[];
+}
+
+interface DataContextValue extends AppState {
+  // Quotes
+  createQuote: (
+    q: Omit<Quote, 'id' | 'createdAt' | 'updates' | 'progressPercent' | 'status' | 'shareToken'>
+  ) => Quote;
+  updateQuote: (id: string, patch: Partial<Quote>) => void;
+  deleteQuote: (id: string) => void;
+  addProgressUpdate: (quoteId: string, update: Omit<ProgressUpdate, 'id' | 'at'>) => void;
+  submitReview: (quoteId: string, review: Omit<CustomerReview, 'submittedAt'>) => void;
+
+  // Portfolio
+  createPortfolio: (p: Omit<PortfolioItem, 'id' | 'createdAt'>) => PortfolioItem;
+  updatePortfolio: (id: string, patch: Partial<PortfolioItem>) => void;
+  deletePortfolio: (id: string) => void;
+
+  // Auth (admin)
+  isAdmin: boolean;
+  adminLogin: (id: string, pw: string) => Promise<boolean>;
+  adminLogout: () => Promise<void>;
+
+  // backend mode
+  backendMode: 'forgedb' | 'local';
+
+  // utils
+  getQuote: (id: string) => Quote | undefined;
+  /**
+   * ForgeDB 모드에서 anon 사용자가 자기 quote 를 share_token 으로 단건 조회합니다.
+   * 로컬 모드에서는 그냥 메모리에서 찾습니다.
+   */
+  fetchQuoteByShareToken: (token: string) => Promise<Quote | null>;
+  resetData: () => void;
+}
+
+const DataContext = createContext<DataContextValue | null>(null);
+
+const AUTH_KEY = 'yukye_design_admin_auth_v1';
+const ADMIN_ID = 'admin';
+const ADMIN_PW = '1234';
+
+// ============================================================
+//  오프라인 모드 헬퍼 (ForgeDB 미설정 시 폴백)
+// ============================================================
+
+function loadLocalState(): AppState {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as AppState;
+      if (parsed && Array.isArray(parsed.quotes) && Array.isArray(parsed.portfolio)) {
+        return parsed;
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return { quotes: seedQuotes(), portfolio: seedPortfolio() };
+}
+
+function saveLocalState(state: AppState) {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(state));
+  } catch {
+    /* quota exceeded — ignore */
+  }
+}
+
+function genId(prefix = 'id') {
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function recalcProgress(quote: Quote): number {
+  if (quote.status === 'completed') return 100;
+  if (quote.status === 'cancelled') return quote.progressPercent ?? 0;
+  const u = quote.updates ?? [];
+  const milestoneCount = u.filter((x) => x.category === 'milestone').length;
+  const base = Math.min(80, milestoneCount * 20);
+  const remaining = 100 - base;
+  const lastProgress = [...u].reverse().find((x) => x.category === 'progress');
+  let bonus = 0;
+  if (lastProgress) {
+    const custUpdates = u.filter(
+      (x) => x.category === 'progress' && x.authorRole === 'customer'
+    ).length;
+    bonus = Math.min(remaining, custUpdates * 5 + 5);
+  }
+  return Math.min(95, base + bonus);
+}
+
+// ============================================================
+//  ForgeDB 매핑 (DB row ↔ 도메인 모델)
+// ============================================================
+
+interface QuoteRow {
+  id: string;
+  created_at: string;
+  customer_name: string;
+  phone: string;
+  email: string | null;
+  region: string;
+  preferred_contact_time: string | null;
+  space_type: string;
+  area_size: number;
+  budget: string;
+  move_in_date: string | null;
+  space_types: string[];
+  styles: string[];
+  additional_requests: string | null;
+  status: QuoteStatus;
+  admin_memo: string | null;
+  contract_amount: number | null;
+  progress_percent: number;
+  review: CustomerReview | null;
+  manager_id: string | null;
+  share_token: string;
+}
+
+interface ProgressRow {
+  id: string;
+  quote_id: string;
+  at: string;
+  author_role: 'admin' | 'customer' | 'system';
+  author_name: string;
+  category: ProgressUpdate['category'];
+  title: string;
+  message: string | null;
+  attachments: ProgressAttachment[];
+  visible_to_customer: boolean;
+}
+
+interface PortfolioRow {
+  id: string;
+  created_at: string;
+  title: string;
+  category: PortfolioItem['category'];
+  space_type: string;
+  area: number;
+  location: string;
+  year: number;
+  duration_weeks: number;
+  budget: string;
+  description: string;
+  cover_color: string;
+  cover_accent: string;
+  tags: string[];
+  featured: boolean;
+  published: boolean;
+}
+
+function rowToQuote(row: QuoteRow, updates: ProgressUpdate[]): Quote {
+  return {
+    id: row.id,
+    createdAt: row.created_at,
+    customerName: row.customer_name,
+    phone: row.phone,
+    email: row.email ?? undefined,
+    region: row.region,
+    preferredContactTime: row.preferred_contact_time ?? undefined,
+    spaceType: row.space_type as SpaceType,
+    areaSize: row.area_size,
+    budget: row.budget,
+    moveInDate: row.move_in_date ?? undefined,
+    spaceTypes: row.space_types ?? [],
+    styles: row.styles ?? [],
+    additionalRequests: row.additional_requests ?? undefined,
+    status: row.status,
+    adminMemo: row.admin_memo ?? undefined,
+    contractAmount: row.contract_amount ?? undefined,
+    progressPercent: row.progress_percent,
+    review: row.review ?? undefined,
+    managerId: row.manager_id ?? undefined,
+    shareToken: row.share_token,
+    updates,
+  };
+}
+
+function rowToPortfolio(row: PortfolioRow): PortfolioItem {
+  return {
+    id: row.id,
+    createdAt: row.created_at,
+    title: row.title,
+    category: row.category,
+    spaceType: row.space_type,
+    area: row.area,
+    location: row.location,
+    year: row.year,
+    durationWeeks: row.duration_weeks,
+    budget: row.budget,
+    description: row.description,
+    coverColor: row.cover_color,
+    coverAccent: row.cover_accent,
+    tags: row.tags ?? [],
+    featured: row.featured,
+    published: row.published,
+  };
+}
+
+function quoteToRowPatch(patch: Partial<Quote>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (patch.status !== undefined) out.status = patch.status;
+  if (patch.adminMemo !== undefined) out.admin_memo = patch.adminMemo ?? null;
+  if (patch.contractAmount !== undefined) out.contract_amount = patch.contractAmount ?? null;
+  if (patch.progressPercent !== undefined) out.progress_percent = patch.progressPercent;
+  if (patch.review !== undefined) out.review = patch.review ?? null;
+  if (patch.managerId !== undefined) out.manager_id = patch.managerId ?? null;
+  return out;
+}
+
+// ============================================================
+//  Provider
+// ============================================================
+
+export function DataProvider({ children }: { children: ReactNode }) {
+  const backendMode: 'forgedb' | 'local' = isForgeConfigured ? 'forgedb' : 'local';
+  const [state, setState] = useState<AppState>(() =>
+    backendMode === 'local' ? loadLocalState() : { quotes: [], portfolio: [] }
+  );
+  const [isAdmin, setIsAdmin] = useState<boolean>(() => {
+    if (backendMode === 'forgedb') return false; // ForgeDB 세션은 비동기 hydrate
+    return localStorage.getItem(AUTH_KEY) === '1';
+  });
+
+  // ---------- 오프라인 모드: localStorage 영속화 ----------
+  useEffect(() => {
+    if (backendMode === 'local') saveLocalState(state);
+  }, [state, backendMode]);
+
+  // ---------- ForgeDB 모드: 초기 hydrate + 인증 상태 구독 ----------
+  useEffect(() => {
+    if (backendMode !== 'forgedb') return;
+    let cancelled = false;
+
+    async function hydrate() {
+      try {
+        const fb = getForge();
+        // 1) 인증 상태부터 확인 — 관리자 여부에 따라 SELECT 범위가 달라집니다.
+        const sessionRes = await fb.auth.getSession();
+        if (cancelled) return;
+        const isAuthed = !!sessionRes.data?.session;
+        if (isAuthed) setIsAdmin(true);
+
+        // 2) quotes 는 RLS 가 관리자/공유토큰별 필터링을 처리합니다.
+        //    - 관리자 로그인 상태: 전체 quote hydrate (관리자 콘솔)
+        //    - 비로그인 anon: 빈 목록 — 고객은 /quote/track/:token 으로만 들어옴
+        const [quotesRes, progressRes, portfolioRes] = await Promise.all([
+          isAuthed
+            ? fb.from('quotes').select('*').order('created_at', { ascending: false })
+            : Promise.resolve({ data: [], error: null as null }),
+          fb.from('progress_updates').select('*').order('at', { ascending: false }),
+          fb.from('portfolio').select('*').order('created_at', { ascending: false }),
+        ]);
+        if (cancelled) return;
+        if (quotesRes.error || progressRes.error || portfolioRes.error) {
+          console.error(
+            '[ForgeDB] hydrate 실패:',
+            quotesRes.error ?? progressRes.error ?? portfolioRes.error
+          );
+          return;
+        }
+        const updatesByQuote = new Map<string, ProgressUpdate[]>();
+        for (const r of (progressRes.data ?? []) as ProgressRow[]) {
+          const list = updatesByQuote.get(r.quote_id) ?? [];
+          list.push({
+            id: r.id,
+            at: r.at,
+            authorRole: r.author_role,
+            authorName: r.author_name,
+            category: r.category,
+            title: r.title,
+            message: r.message ?? undefined,
+            attachments: r.attachments ?? [],
+            visibleToCustomer: r.visible_to_customer,
+          });
+          updatesByQuote.set(r.quote_id, list);
+        }
+        const quotes: Quote[] = ((quotesRes.data ?? []) as QuoteRow[]).map((r) =>
+          rowToQuote(r, updatesByQuote.get(r.id) ?? [])
+        );
+        const portfolio: PortfolioItem[] = ((portfolioRes.data ?? []) as PortfolioRow[]).map(
+          rowToPortfolio
+        );
+        setState({ quotes, portfolio });
+      } catch (err) {
+        console.error('[ForgeDB] hydrate 예외:', err);
+      }
+    }
+
+    hydrate();
+
+    // ----- 인증 상태 자동 복원 -----
+    let authSub: { subscription?: { unsubscribe?: () => void } } | null = null;
+    try {
+      const { data: sub } = getForge().auth.onAuthStateChange((event) => {
+        if (cancelled) return;
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') setIsAdmin(true);
+        else if (event === 'SIGNED_OUT') setIsAdmin(false);
+      });
+      authSub = sub;
+    } catch (err) {
+      console.warn('[ForgeDB] onAuthStateChange 구독 실패:', err);
+    }
+
+    return () => {
+      cancelled = true;
+      try {
+        authSub?.subscription?.unsubscribe?.();
+      } catch {
+        /* ignore */
+      }
+    };
+  }, [backendMode]);
+
+  // ---------- ForgeDB 모드: Realtime 동기화 ----------
+  // 다른 세션/관리자가 변경한 데이터를 자동으로 로컬 state에 반영합니다.
+  useEffect(() => {
+    if (backendMode !== 'forgedb') return;
+    const fb = getForge();
+
+    const refreshQuote = async (id: string) => {
+      if (!id) return;
+      try {
+        const [{ data: qRow }, { data: updRows }] = await Promise.all([
+          fb.from('quotes').select('*').eq('id', id).maybeSingle(),
+          fb
+            .from('progress_updates')
+            .select('*')
+            .eq('quote_id', id)
+            .order('at', { ascending: false }),
+        ]);
+        if (!qRow) {
+          setState((s) => ({ ...s, quotes: s.quotes.filter((q) => q.id !== id) }));
+          return;
+        }
+        const updates: ProgressUpdate[] = ((updRows ?? []) as ProgressRow[]).map((r) => ({
+          id: r.id,
+          at: r.at,
+          authorRole: r.author_role,
+          authorName: r.author_name,
+          category: r.category,
+          title: r.title,
+          message: r.message ?? undefined,
+          attachments: r.attachments ?? [],
+          visibleToCustomer: r.visible_to_customer,
+        }));
+        const mapped = rowToQuote(qRow as QuoteRow, updates);
+        setState((s) => {
+          const exists = s.quotes.some((q) => q.id === id);
+          return {
+            ...s,
+            quotes: exists
+              ? s.quotes.map((q) => (q.id === id ? mapped : q))
+              : [mapped, ...s.quotes],
+          };
+        });
+      } catch (err) {
+        console.error('[ForgeDB] refreshQuote 실패:', err);
+      }
+    };
+
+    const refreshPortfolio = async () => {
+      try {
+        const { data } = await fb
+          .from('portfolio')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (data) {
+          const portfolio = (data as PortfolioRow[]).map(rowToPortfolio);
+          setState((s) => ({ ...s, portfolio }));
+        }
+      } catch (err) {
+        console.error('[ForgeDB] refreshPortfolio 실패:', err);
+      }
+    };
+
+    let channel: { unsubscribe: () => void | Promise<void> } | null = null;
+    try {
+      const ch = fb.channel('yukye-state');
+      ch.on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'quotes' },
+        (payload: { new: { id?: string } | null; old: { id?: string } | null }) => {
+          const id = payload.new?.id ?? payload.old?.id;
+          if (id) void refreshQuote(id);
+        }
+      )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'progress_updates' },
+          (payload: { new: { quote_id?: string } | null; old: { quote_id?: string } | null }) => {
+            const qid = payload.new?.quote_id ?? payload.old?.quote_id;
+            if (qid) void refreshQuote(qid);
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'portfolio' },
+          () => {
+            void refreshPortfolio();
+          }
+        )
+        .subscribe((status: string) => {
+          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+            console.warn('[ForgeDB] Realtime 채널 상태:', status);
+          }
+        });
+      channel = ch as unknown as { unsubscribe: () => void | Promise<void> };
+    } catch (err) {
+      console.warn('[ForgeDB] Realtime 구독 실패 (오프라인 OK):', err);
+    }
+
+    return () => {
+      try {
+        if (channel) void channel.unsubscribe();
+      } catch {
+        /* ignore */
+      }
+    };
+  }, [backendMode]);
+
+  // ---------- Quote ----------
+  const createQuote: DataContextValue['createQuote'] = useCallback(
+    (q) => {
+      const createdAt = new Date().toISOString();
+      const sysUpdate: ProgressUpdate = {
+        id: genId('pu'),
+        at: createdAt,
+        authorRole: 'system',
+        authorName: 'System',
+        category: 'milestone',
+        title: '견적 요청이 접수되었습니다',
+        message: '담당자가 배정되면 알림을 드릴게요.',
+        visibleToCustomer: true,
+      };
+      // ⚠️ share_token 은 RLS 의 forge_share_token() 헬퍼와 짝을 이루는
+      // 고객 식별자. crypto.randomUUID 가 없는 환경을 위해 폴백 포함.
+      const shareToken =
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID()
+          : `tk_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+      const local: Quote = {
+        ...q,
+        id: genId('qt'),
+        createdAt,
+        updates: [sysUpdate],
+        progressPercent: 5,
+        status: 'received',
+        shareToken,
+      };
+      setState((s) => ({ ...s, quotes: [local, ...s.quotes] }));
+
+      if (backendMode === 'forgedb') {
+        // fire-and-forget 동기화
+        (async () => {
+          try {
+            const fb = getForge();
+            const { data, error } = await fb
+              .from('quotes')
+              .insert({
+                customer_name: local.customerName,
+                phone: local.phone,
+                email: local.email ?? null,
+                region: local.region,
+                preferred_contact_time: local.preferredContactTime ?? null,
+                space_type: local.spaceType,
+                area_size: local.areaSize,
+                budget: local.budget,
+                move_in_date: local.moveInDate ?? null,
+                space_types: local.spaceTypes,
+                styles: local.styles,
+                additional_requests: local.additionalRequests ?? null,
+                status: local.status,
+                progress_percent: local.progressPercent,
+                share_token: shareToken,
+              })
+              .select('id, share_token')
+              .single();
+            if (error || !data) return;
+            const serverId = (data as { id: string }).id;
+            // 서버의 share_token 이 다르면 보존 (있으면 신뢰)
+            const serverToken = (data as { share_token?: string }).share_token ?? shareToken;
+            // id 교체 + 시스템 업데이트 푸시
+            setState((s) => ({
+              ...s,
+              quotes: s.quotes.map((q) =>
+                q.id === local.id
+                  ? {
+                      ...q,
+                      id: serverId,
+                      shareToken: serverToken,
+                      updates: q.updates.map((u) => ({ ...u, id: genId('pu') })),
+                    }
+                  : q
+              ),
+            }));
+            await fb.from('progress_updates').insert({
+              quote_id: serverId,
+              author_role: 'system',
+              author_name: 'System',
+              category: 'milestone',
+              title: sysUpdate.title,
+              message: sysUpdate.message ?? null,
+              attachments: [],
+              visible_to_customer: true,
+            });
+          } catch (err) {
+            console.error('[ForgeDB] createQuote 실패 (로컬에 저장됨):', err);
+          }
+        })();
+      }
+      return local;
+    },
+    [backendMode]
+  );
+
+  const updateQuote: DataContextValue['updateQuote'] = useCallback(
+    (id, patch) => {
+      setState((s) => ({
+        ...s,
+        quotes: s.quotes.map((q) => {
+          if (q.id !== id) return q;
+          const next: Quote = { ...q, ...patch };
+          next.progressPercent = recalcProgress(next);
+          return next;
+        }),
+      }));
+      if (backendMode === 'forgedb') {
+        getForge()
+          .from('quotes')
+          .update(quoteToRowPatch(patch))
+          .eq('id', id)
+          .then(({ error }) => {
+            if (error) console.error('[ForgeDB] updateQuote 실패:', error);
+          });
+      }
+    },
+    [backendMode]
+  );
+
+  const deleteQuote: DataContextValue['deleteQuote'] = useCallback(
+    (id) => {
+      setState((s) => ({ ...s, quotes: s.quotes.filter((q) => q.id !== id) }));
+      if (backendMode === 'forgedb') {
+        getForge()
+          .from('quotes')
+          .delete()
+          .eq('id', id)
+          .then(({ error }) => {
+            if (error) console.error('[ForgeDB] deleteQuote 실패:', error);
+          });
+      }
+    },
+    [backendMode]
+  );
+
+  const addProgressUpdate: DataContextValue['addProgressUpdate'] = useCallback(
+    (quoteId, update) => {
+      const upd: ProgressUpdate = {
+        ...update,
+        id: genId('pu'),
+        at: new Date().toISOString(),
+      };
+      setState((s) => ({
+        ...s,
+        quotes: s.quotes.map((q) => {
+          if (q.id !== quoteId) return q;
+          const next: Quote = {
+            ...q,
+            updates: [...(q.updates ?? []), upd],
+          };
+          // ⚠️ 자동 상태 전이는 *관리자/시스템*이 등록한 milestone 에서만 적용합니다.
+          // 고객이 "거실 완료" 같은 메모를 올렸다고 해서 status=completed 로 넘어가면
+          // 리뷰 모달이 사전 노출되는 운영 사고가 납니다.
+          const isManagerEntry =
+            upd.authorRole === 'admin' || upd.authorRole === 'system';
+          if (isManagerEntry && upd.category === 'milestone') {
+            const title = upd.title.toLowerCase();
+            if (title.includes('계약') || title.includes('sign')) {
+              next.status = 'in_progress';
+            } else if (
+              title.includes('완료') ||
+              title.includes('completion') ||
+              title.includes('인도')
+            ) {
+              next.status = 'completed';
+            }
+          }
+          next.progressPercent = recalcProgress(next);
+          // ForgeDB 모드면 status/progress 도 같이 업데이트
+          if (backendMode === 'forgedb') {
+            const row = quoteToRowPatch({
+              status: next.status,
+              progressPercent: next.progressPercent,
+            });
+            getForge()
+              .from('quotes')
+              .update(row)
+              .eq('id', quoteId)
+              .then(({ error }) => {
+                if (error) console.error('[ForgeDB] addProgressUpdate(quote) 실패:', error);
+              });
+          }
+          return next;
+        }),
+      }));
+      if (backendMode === 'forgedb') {
+        getForge()
+          .from('progress_updates')
+          .insert({
+            quote_id: quoteId,
+            author_role: upd.authorRole,
+            author_name: upd.authorName,
+            category: upd.category,
+            title: upd.title,
+            message: upd.message ?? null,
+            attachments: upd.attachments ?? [],
+            visible_to_customer: upd.visibleToCustomer,
+          })
+          .then(({ error }) => {
+            if (error) console.error('[ForgeDB] addProgressUpdate 실패:', error);
+          });
+      }
+    },
+    [backendMode]
+  );
+
+  const submitReview: DataContextValue['submitReview'] = useCallback(
+    (quoteId, review) => {
+      const submittedAt = new Date().toISOString();
+      const full: CustomerReview = { ...review, submittedAt };
+      setState((s) => ({
+        ...s,
+        quotes: s.quotes.map((q) => (q.id === quoteId ? { ...q, review: full } : q)),
+      }));
+      if (backendMode === 'forgedb') {
+        getForge()
+          .from('quotes')
+          .update({ review: full })
+          .eq('id', quoteId)
+          .then(({ error }) => {
+            if (error) console.error('[ForgeDB] submitReview 실패:', error);
+          });
+      }
+    },
+    [backendMode]
+  );
+
+  // ---------- Portfolio ----------
+  const createPortfolio: DataContextValue['createPortfolio'] = useCallback(
+    (p) => {
+      const local: PortfolioItem = {
+        ...p,
+        id: genId('pf'),
+        createdAt: new Date().toISOString(),
+      };
+      setState((s) => ({ ...s, portfolio: [local, ...s.portfolio] }));
+      if (backendMode === 'forgedb') {
+        getForge()
+          .from('portfolio')
+          .insert({
+            title: local.title,
+            category: local.category,
+            space_type: local.spaceType,
+            area: local.area,
+            location: local.location,
+            year: local.year,
+            duration_weeks: local.durationWeeks,
+            budget: local.budget,
+            description: local.description,
+            cover_color: local.coverColor,
+            cover_accent: local.coverAccent,
+            tags: local.tags,
+            featured: local.featured,
+            published: local.published,
+          })
+          .then(({ error }) => {
+            if (error) console.error('[ForgeDB] createPortfolio 실패:', error);
+          });
+      }
+      return local;
+    },
+    [backendMode]
+  );
+
+  const updatePortfolio: DataContextValue['updatePortfolio'] = useCallback(
+    (id, patch) => {
+      setState((s) => ({
+        ...s,
+        portfolio: s.portfolio.map((p) => (p.id === id ? { ...p, ...patch } : p)),
+      }));
+      if (backendMode === 'forgedb') {
+        const row: Record<string, unknown> = {};
+        if (patch.title !== undefined) row.title = patch.title;
+        if (patch.category !== undefined) row.category = patch.category;
+        if (patch.spaceType !== undefined) row.space_type = patch.spaceType;
+        if (patch.area !== undefined) row.area = patch.area;
+        if (patch.location !== undefined) row.location = patch.location;
+        if (patch.year !== undefined) row.year = patch.year;
+        if (patch.durationWeeks !== undefined) row.duration_weeks = patch.durationWeeks;
+        if (patch.budget !== undefined) row.budget = patch.budget;
+        if (patch.description !== undefined) row.description = patch.description;
+        if (patch.coverColor !== undefined) row.cover_color = patch.coverColor;
+        if (patch.coverAccent !== undefined) row.cover_accent = patch.coverAccent;
+        if (patch.tags !== undefined) row.tags = patch.tags;
+        if (patch.featured !== undefined) row.featured = patch.featured;
+        if (patch.published !== undefined) row.published = patch.published;
+        getForge()
+          .from('portfolio')
+          .update(row)
+          .eq('id', id)
+          .then(({ error }) => {
+            if (error) console.error('[ForgeDB] updatePortfolio 실패:', error);
+          });
+      }
+    },
+    [backendMode]
+  );
+
+  const deletePortfolio: DataContextValue['deletePortfolio'] = useCallback(
+    (id) => {
+      setState((s) => ({ ...s, portfolio: s.portfolio.filter((p) => p.id !== id) }));
+      if (backendMode === 'forgedb') {
+        getForge()
+          .from('portfolio')
+          .delete()
+          .eq('id', id)
+          .then(({ error }) => {
+            if (error) console.error('[ForgeDB] deletePortfolio 실패:', error);
+          });
+      }
+    },
+    [backendMode]
+  );
+
+  // ---------- Auth ----------
+  const adminLogin: DataContextValue['adminLogin'] = useCallback(
+    async (id, pw) => {
+      if (backendMode === 'local') {
+        if (id === ADMIN_ID && pw === ADMIN_PW) {
+          localStorage.setItem(AUTH_KEY, '1');
+          setIsAdmin(true);
+          return true;
+        }
+        return false;
+      }
+      // ForgeDB Auth: 이메일/비밀번호로 로그인 (관리자 계정)
+      try {
+        const fb = getForge();
+        // id 가 이메일이 아니면 도메인을 붙여 정규화
+        const email = id.includes('@') ? id : `${id}@yukye.local`;
+        const { data, error } = await fb.auth.signInWithPassword({ email, password: pw });
+        if (error || !data.session) {
+          // 가입 안 된 경우 자동 signUp 시도 (첫 부팅 편의)
+          const su = await fb.auth.signUp({ email, password: pw });
+          if (su.error || !su.data.session) return false;
+          setIsAdmin(true);
+          return true;
+        }
+        setIsAdmin(true);
+        return true;
+      } catch (err) {
+        console.error('[ForgeDB] adminLogin 실패:', err);
+        return false;
+      }
+    },
+    [backendMode]
+  );
+
+  const adminLogout: DataContextValue['adminLogout'] = useCallback(async () => {
+    if (backendMode === 'local') {
+      localStorage.removeItem(AUTH_KEY);
+      setIsAdmin(false);
+      return;
+    }
+    try {
+      await getForge().auth.signOut();
+    } catch (err) {
+      console.error('[ForgeDB] adminLogout 실패:', err);
+    }
+    setIsAdmin(false);
+  }, [backendMode]);
+
+  // ---------- utils ----------
+  const getQuote: DataContextValue['getQuote'] = useCallback(
+    (id) => state.quotes.find((q) => q.id === id),
+    [state.quotes]
+  );
+
+  const fetchQuoteByShareToken: DataContextValue['fetchQuoteByShareToken'] = useCallback(
+    async (token) => {
+      const trimmed = token?.trim();
+      if (!trimmed) return null;
+      // 1) 로컬/메모리에 있으면 즉시 반환 (hydrate 후, 또는 local 모드)
+      const localHit = state.quotes.find((q) => q.shareToken === trimmed);
+      if (localHit) return localHit;
+      // 2) ForgeDB 모드: 토큰으로 단건 조회. RLS 의 forge_share_token() 이 anon SELECT 를 허용합니다.
+      if (backendMode === 'forgedb') {
+        try {
+          const fb = getForge();
+          // 토큰 GUC 는 Postgres 확장으로 별도 호출해야 하지만,
+          // forgeClient 래퍼가 anon 요청에 'token' claim 을 주입한다고 가정하고 호출합니다.
+          // 실제 콘솔이 그 인터페이스를 제공하지 않을 경우 select('*').eq('share_token', token)
+          // 로 폴백합니다 (anon RLS 가 share_token 컬럼을 노출하지 않을 수 있으므로
+          // 데이터가 안 보이는 경우 사용자에게 "유효하지 않은 링크" 안내).
+          let row: QuoteRow | null = null;
+          let updates: ProgressUpdate[] = [];
+          try {
+            const [{ data: qRow }, { data: updRows }] = await Promise.all([
+              fb
+                .from('quotes')
+                .select('*')
+                .eq('share_token', trimmed)
+                .maybeSingle(),
+              fb
+                .from('progress_updates')
+                .select('*')
+                .order('at', { ascending: false }),
+            ]);
+            row = (qRow as QuoteRow) ?? null;
+            updates = ((updRows ?? []) as ProgressRow[])
+              .filter((r) => r.quote_id === row?.id)
+              .map((r) => ({
+                id: r.id,
+                at: r.at,
+                authorRole: r.author_role,
+                authorName: r.author_name,
+                category: r.category,
+                title: r.title,
+                message: r.message ?? undefined,
+                attachments: r.attachments ?? [],
+                visibleToCustomer: r.visible_to_customer,
+              }));
+          } catch {
+            row = null;
+            updates = [];
+          }
+          if (!row) return null;
+          const mapped = rowToQuote(row, updates);
+          setState((s) => {
+            if (s.quotes.some((q) => q.id === mapped.id)) return s;
+            return { ...s, quotes: [mapped, ...s.quotes] };
+          });
+          return mapped;
+        } catch (err) {
+          console.error('[ForgeDB] fetchQuoteByShareToken 실패:', err);
+          return null;
+        }
+      }
+      return null;
+    },
+    [state.quotes, backendMode]
+  );
+
+  const resetData = useCallback(() => {
+    if (backendMode === 'local') {
+      localStorage.removeItem(LS_KEY);
+      setState({ quotes: seedQuotes(), portfolio: seedPortfolio() });
+    }
+    // ForgeDB 모드에서는 별도 reset RPC 가 필요 — 데모에서는 no-op
+  }, [backendMode]);
+
+  const value = useMemo<DataContextValue>(
+    () => ({
+      ...state,
+      createQuote,
+      updateQuote,
+      deleteQuote,
+      addProgressUpdate,
+      submitReview,
+      createPortfolio,
+      updatePortfolio,
+      deletePortfolio,
+      isAdmin,
+      adminLogin,
+      adminLogout,
+      getQuote,
+      fetchQuoteByShareToken,
+      resetData,
+      backendMode,
+    }),
+    [
+      state,
+      createQuote,
+      updateQuote,
+      deleteQuote,
+      addProgressUpdate,
+      submitReview,
+      createPortfolio,
+      updatePortfolio,
+      deletePortfolio,
+      isAdmin,
+      adminLogin,
+      adminLogout,
+      getQuote,
+      fetchQuoteByShareToken,
+      resetData,
+      backendMode,
+    ]
+  );
+
+  return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
+}
+
+export function useData() {
+  const ctx = useContext(DataContext);
+  if (!ctx) throw new Error('useData must be used within DataProvider');
+  return ctx;
+}

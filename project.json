@@ -1,0 +1,32 @@
+{
+  "profile": {
+    "id": "3911ddc3-b022-44d8-b5c9-b15e8c5adc81",
+    "name": "Yukyu Design",
+    "description": "",
+    "project_type": "web_app",
+    "industry": "other",
+    "skill_level": "beginner",
+    "created_at": "2026-07-04T08:00:38.102Z",
+    "updated_at": "2026-07-04T08:00:38.102Z"
+  },
+  "goals": [],
+  "roles": [],
+  "features": [],
+  "screens": [],
+  "flows": [],
+  "components": [],
+  "data_entities": [],
+  "apis": [],
+  "integrations": [],
+  "workstreams": [],
+  "milestones": [],
+  "open_questions": [],
+  "conflicts": [],
+  "design_tokens": [],
+  "deployment_targets": [],
+  "discovery_state": "not_started",
+  "discovery_completion_score": 0,
+  "active_blueprint_view": "screen",
+  "version": 1,
+  "last_saved_at": "2026-07-04T08:00:38.102Z"
+}

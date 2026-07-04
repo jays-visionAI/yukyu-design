@@ -50,6 +50,8 @@ export default function AdminPartners() {
   // URL 의 ?id= 와 모달 상태 동기화
   // - hydrate 끝난 뒤 ?id= 가 가리키는 신청을 찾아 모달 오픈
   // - 모달 닫을 때 ?id= 쿼리 제거 (히스토리 더럽히지 않음)
+  // - 모달이 열려있는 동안 다른 관리자가 같은 신청을 변경하면
+  //   applications 가 갱신되고 모달 안의 데이터도 자동 따라갑니다 (Realtime 협업).
   useEffect(() => {
     if (!isReady) return;
     const id = searchParams.get('id');
@@ -59,7 +61,9 @@ export default function AdminPartners() {
       return;
     }
     const found = applications.find((a) => a.id === id);
-    if (found) setSelected(found);
+    if (found) {
+      setSelected((cur) => (cur && cur.id === found.id ? cur : found));
+    }
   }, [isReady, searchParams, applications]);
 
   const closeModal = useCallback(() => {
@@ -76,14 +80,32 @@ export default function AdminPartners() {
     if (tab !== 'all') list = list.filter((a) => a.status === tab);
     const q = search.trim().toLowerCase();
     if (q) {
-      list = list.filter(
-        (a) =>
-          a.business.companyName.toLowerCase().includes(q) ||
-          a.business.contactName.toLowerCase().includes(q) ||
-          a.business.contactPhone.includes(q) ||
-          a.business.contactEmail.toLowerCase().includes(q) ||
-          a.business.businessNumber.includes(q)
-      );
+      list = list.filter((a) => {
+        const biz = a.business;
+        const perf = a.performance;
+        const caseMatches = a.cases.some(
+          (c) =>
+            c.title.toLowerCase().includes(q) ||
+            c.location.toLowerCase().includes(q) ||
+            c.spaceType.toLowerCase().includes(q)
+        );
+        return (
+          biz.companyName.toLowerCase().includes(q) ||
+          biz.contactName.toLowerCase().includes(q) ||
+          biz.contactPhone.includes(q) ||
+          biz.contactEmail.toLowerCase().includes(q) ||
+          biz.businessNumber.includes(q) ||
+          biz.address.toLowerCase().includes(q) ||
+          PARTNER_SPECIALTY_LABELS[biz.businessType].toLowerCase().includes(q) ||
+          perf.specialties.some((s) =>
+            PARTNER_SPECIALTY_LABELS[s].toLowerCase().includes(q)
+          ) ||
+          perf.primaryRegions.some((r) => r.toLowerCase().includes(q)) ||
+          (a.note ?? '').toLowerCase().includes(q) ||
+          (a.adminMemo ?? '').toLowerCase().includes(q) ||
+          caseMatches
+        );
+      });
     }
     return list;
   }, [applications, tab, search]);
@@ -101,6 +123,11 @@ export default function AdminPartners() {
   }, [applications]);
 
   function handleReset() {
+    // ForgeDB 모드에서는 RLS 안전을 위해 RPC 필요 — 데모 초기화는 local 모드에서만 동작합니다.
+    if (backendMode !== 'local') {
+      toast.push('ForgeDB 모드에서는 데모 초기화를 사용할 수 없습니다. 콘솔 SQL Editor에서 초기화해 주세요.');
+      return;
+    }
     if (!window.confirm('모든 파트너 신청을 삭제하시겠습니까? 되돌릴 수 없습니다.')) return;
     resetApplications();
     toast.push('파트너 신청 데이터가 초기화되었습니다.');
@@ -181,7 +208,7 @@ export default function AdminPartners() {
         <input
           className="input"
           style={{ maxWidth: 360 }}
-          placeholder="회사명·담당자·연락처·사업자번호로 검색"
+          placeholder="회사명·담당자·연락처·사업자번호·지역·전문분야로 검색"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />

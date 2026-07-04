@@ -1,0 +1,67 @@
+name: Bug Report
+description: 동작이 기대와 다른 문제를 보고할 때 사용합니다.
+title: "[bug] "
+labels: ["bug"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### 🐞 버그 리포트 가이드
+        재현 가능한 시나리오와 환경 정보를 함께 적어주시면 빠르게 도움드릴 수 있습니다.
+
+  - type: input
+    id: summary
+    attributes:
+      label: 한 줄 요약
+      description: 문제가 무엇인지 한 문장으로 정리해 주세요.
+      placeholder: "저장 버튼을 여러 번 누르면 중복 요청이 발생함"
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 재현 절차
+      description: 버그를 재현할 수 있는 단계별 절차를 적어 주세요.
+      placeholder: |
+        1. `/admin/seo` 페이지 접속
+        2. 메타 태그 탭에서 제목 수정
+        3. "저장" 버튼 클릭
+        4. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 기대 동작
+      description: 어떻게 동작해야 하는지 적어 주세요.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 실제 동작
+      description: 실제로 어떤 일이 일어나는지 적어 주세요. (스크린샷 / GIF 도 환영)
+    validations:
+      required: true
+
+  - type: input
+    id: env
+    attributes:
+      label: 환경
+      description: 브라우저/OS/데이터 모드(local vs forgedb) 등
+      placeholder: "Chrome 126 · macOS 14 · localStorage mode"
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 관련 로그 / 콘솔 출력
+      description: 있다면 DevTools console 또는 터미널 로그를 붙여 주세요.
+    validations:
+      required: false

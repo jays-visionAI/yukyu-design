@@ -66,7 +66,7 @@ export default function Landing() {
               </p>
               <div className="row" style={{ gap: 'var(--space-3)' }}>
                 <Link to="/quote" className="btn btn-accent btn-lg">
-                  무료 견적 신청 →
+                  견적신청 →
                 </Link>
                 <a
                   href="#portfolio"

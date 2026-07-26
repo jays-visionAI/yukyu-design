@@ -499,7 +499,7 @@ function StepBusinessInfo({
     <div className="card stack" style={{ gap: 24 }}>
       <h2 style={{ fontSize: 20 }}>사업자 기본 정보</h2>
 
-      <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+      <div className="grid-2">
         <Field
           label="회사/상호명"
           required
@@ -731,7 +731,7 @@ function StepCasesPerformance({
                 )}
               </div>
 
-              <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div className="grid-2">
                 <Field
                   label="시공 제목"
                   required
@@ -889,7 +889,7 @@ function StepCasesPerformance({
       <div className="card stack" style={{ gap: 20 }}>
         <h2 style={{ fontSize: 20 }}>실적 정보</h2>
 
-        <div className="grid" style={{ gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+        <div className="grid-3">
           <Field
             label="누적 시공 건수 (최근 3년)"
             required
@@ -1174,7 +1174,10 @@ function Field({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="field" style={fullWidth ? { gridColumn: '1 / -1' } : undefined}>
+    <div
+      className={'field' + (error ? ' has-error' : '')}
+      style={fullWidth ? { gridColumn: '1 / -1' } : undefined}
+    >
       <label className="field-label">
         {label}
         {required && <span className="req">*</span>}

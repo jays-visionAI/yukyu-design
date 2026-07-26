@@ -260,9 +260,26 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
   }, [events]);
 
   useEffect(() => {
-    saveSeo(seo);
-    // (구현) 시드 데이터를 영속화하지 않기 위해 deps 에서 setSeo 가 아닌 seo 만 의존
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // ⚠️ saveSeo 는 내부에서 setSeo 를 다시 호출하므로, 직접 호출하면
+    //   seo → setSeo(stamped) → seo 변경 → effect 재실행 → ... 무한 루프.
+    //   대신 localStorage 영속화만 직접 수행하고, ForgeDB 동기화도 직접 처리합니다.
+    try {
+      localStorage.setItem(SEO_KEY, JSON.stringify(seo));
+    } catch {
+      /* quota — 무시 */
+    }
+    if (isForgeConfigured) {
+      try {
+        const fb = getForge();
+        fb.from('seo_settings')
+          .upsert({ id: 'site', payload: seo, updated_at: seo.updatedAt })
+          .then(({ error }) => {
+            if (error) console.warn('[ForgeDB] SEO save 동기화 실패:', error);
+          });
+      } catch {
+        /* ignore */
+      }
+    }
   }, [seo]);
 
   // === 페이지뷰 자동 추적 (클라이언트 사이드) ===

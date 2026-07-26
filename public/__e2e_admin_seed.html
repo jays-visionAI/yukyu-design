@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<title>e2e admin seed</title>
+</head>
+<body>
+<script>
+  // localStorage 에 어드민 인증 플래그 세팅 후 /admin/seo 로 이동
+  try {
+    localStorage.setItem('yukye_design_admin_auth_v1', '1');
+  } catch (e) {
+    document.body.textContent = 'localStorage setItem 실패: ' + e;
+  }
+  // 약간의 지연 후 redirect
+  setTimeout(function () {
+    window.location.replace('/admin/seo');
+  }, 50);
+</script>
+<p>seeding admin auth…</p>
+</body>
+</html>

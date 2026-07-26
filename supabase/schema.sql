@@ -1,79 +1,113 @@
 -- ===========================================================
 --  Yukye Design — ForgeDB 스키마 & RLS 정책
 --  대상: PostgreSQL 16+ (ForgeDB)
---  적용 위치: https://forgedb.cloud 콘솔 → SQL Editor
---
---  적용 순서
---  1) 아래 "테이블 + RLS" 블록 전체 실행 (한 번에 복사·붙여넣기)
---  2) 콘솔의 Auth 탭에서 첫 관리자 계정 생성 (예: admin@yukye.local)
---  3) 하단 "데모 시드" 블록은 처음 1회만 실행 후 주석 처리
---  4) 빌드된 사이트는 별도의 외부 호스팅(ForgeDB Static)에 dist/ 그대로 업로드
+--  버전: 2.0 (파트너 시스템 확장)
 -- ===========================================================
 
--- ---------- 0. 사전 체크 ----------
--- ForgeDB는 request.jwt.claim.* GUC 를 채워서 호출 권한을 식별합니다.
--- (Supabase의 auth.uid() 와 동일한 효과)
--- 헬퍼 함수로 한 번 정의해두면 정책 작성이 깔끔해집니다.
+-- ---------- 0. 헬퍼 함수 ----------
 create or replace function public.forge_uid()
 returns uuid
 language sql
 stable
-as $
+as $$
   select nullif(
     current_setting('request.jwt.claim.sub', true),
     ''
   )::uuid;
-$;
+$$;
 
 create or replace function public.forge_role()
 returns text
 language sql
 stable
-as $
+as $$
   select coalesce(
     current_setting('request.jwt.claim.role', true),
     'anon'
   );
-$;
+$$;
 
--- ForgeDB 의 auth 스키마는 Supabase 와 다를 수 있습니다.
--- 이 블록은 *존재할 경우에만* manager_id 외래키를 연결하고,
--- 없으면 그냥 uuid 컬럼으로 남겨둡니다 (운영에 지장 없음).
-do $
-begin
-  if exists (
-    select 1 from information_schema.tables
-    where table_schema = 'auth' and table_name = 'users'
-  ) then
-    -- 이미 다른 곳에서 fk 가 걸려있으면 건너뜀
-    if not exists (
-      select 1 from information_schema.table_constraints
-      where table_schema = 'public'
-        and table_name = 'quotes'
-        and constraint_name = 'quotes_manager_id_fkey'
-    ) then
-      alter table public.quotes
-        add constraint quotes_manager_id_fkey
-        foreign key (manager_id) references auth.users(id) on delete set null;
-    end if;
-  end if;
-end $;
+create or replace function public.forge_share_token()
+returns text
+language sql
+stable
+as $$
+  select nullif(
+    current_setting('request.jwt.claim.token', true),
+    ''
+  );
+$$;
 
--- ---------- 1. 기본 테이블 ----------
+-- ---------- 1. 사용자 및 파트너 테이블 ----------
+
+-- 사용자 역할(Role) 관리
+-- ForgeDB의 auth.users와 1:1로 매핑됩니다.
+create table if not exists public.user_profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  updated_at timestamptz,
+  full_name text,
+  avatar_url text,
+  role text not null default 'general_user'
+    check (role in ('admin', 'partner', 'general_user'))
+);
+
+-- 파트너 상세 정보
+create table if not exists public.partners (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid unique not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+
+  -- 회사 정보
+  company_name text not null,
+  business_registration_number text,
+  ceo_name text,
+  address text,
+  main_regions text[],
+
+  -- 담당자 정보
+  contact_person_name text,
+  phone_number text,
+  email text unique not null, -- auth.users.email과 동기화
+
+  -- 소개 및 증빙 자료
+  introduction text,
+  business_license_url text, -- 파일은 ForgeDB Storage에 업로드 후 URL 저장
+  portfolio_url text
+);
+create index if not exists idx_partners_user_id on public.partners(user_id);
+create index if not exists idx_partners_email on public.partners(email);
+
+
+-- 파트너 포트폴리오 (파트너가 직접 등록하는 시공 실적)
+create table if not exists public.partner_portfolios (
+  id uuid primary key default gen_random_uuid(),
+  partner_id uuid not null references public.partners(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+
+  site_name text not null,
+  customer_name text,
+  construction_type text,
+  construction_cost bigint,
+  photos text[], -- 이미지 URL 배열 (최대 20개)
+  description text,
+  published boolean not null default false -- 관리자 승인 후 노출
+);
+create index if not exists idx_partner_portfolios_partner_id on public.partner_portfolios(partner_id);
+
+
+-- ---------- 2. 기존 테이블 (견적, 포트폴리오 등) ----------
 
 -- 시공 견적 (quotes)
 create table if not exists public.quotes (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default now(),
-
-  -- Step 1: 고객정보
   customer_name text not null,
   phone text not null,
   email text,
   region text not null,
   preferred_contact_time text,
-
-  -- Step 2: 시공정보
   space_type text not null,
   area_size integer not null,
   budget text not null,
@@ -81,37 +115,19 @@ create table if not exists public.quotes (
   space_types text[] not null default '{}',
   styles text[] not null default '{}',
   additional_requests text,
-
-  -- 시공 진행 관리
   status text not null default 'received'
     check (status in ('received','in_progress','on_hold','completed','cancelled')),
   admin_memo text,
   contract_amount bigint,
   progress_percent integer not null default 0
     check (progress_percent between 0 and 100),
-
-  -- 만족도 평가 (jsonb 통합 저장)
   review jsonb,
-
-  -- 담당자 (FK 는 위 0번 블록에서 auth.users 존재 시에만 연결)
   manager_id uuid,
-
-  -- 검색 성능을 위한 phone 정규화 컬럼 (선택)
-  phone_hash text generated always as (md5(phone)) stored,
-
-  -- ⚠️ PII 보호용 share_token: 고객이 /quote/track/:token 으로만 자기 quote 조회 가능.
-  --    RLS 가 이 토큰을 GUC 로 받아 anon SELECT 를 제한합니다.
-  --    기본값은 uuid — 매 quote 가 unique 한 URL-safe ID 를 갖습니다.
   share_token uuid not null default gen_random_uuid()
 );
-create index if not exists idx_quotes_created_at_desc
-  on public.quotes(created_at desc);
-create index if not exists idx_quotes_phone_hash
-  on public.quotes(phone_hash);
-create index if not exists idx_quotes_status
-  on public.quotes(status);
-create index if not exists idx_quotes_share_token
-  on public.quotes(share_token);
+create index if not exists idx_quotes_created_at_desc on public.quotes(created_at desc);
+create index if not exists idx_quotes_status on public.quotes(status);
+create index if not exists idx_quotes_share_token on public.quotes(share_token);
 
 -- 진행경과 타임라인
 create table if not exists public.progress_updates (
@@ -126,13 +142,11 @@ create table if not exists public.progress_updates (
   message text,
   attachments jsonb not null default '[]',
   visible_to_customer boolean not null default true,
-
   author_uid uuid
 );
-create index if not exists idx_progress_updates_quote_id
-  on public.progress_updates(quote_id, at desc);
+create index if not exists idx_progress_updates_quote_id on public.progress_updates(quote_id, at desc);
 
--- 포트폴리오
+-- 포트폴리오 (관리자가 등록)
 create table if not exists public.portfolio (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default now(),
@@ -153,273 +167,126 @@ create table if not exists public.portfolio (
   featured boolean not null default false,
   published boolean not null default true
 );
-create index if not exists idx_portfolio_published
-  on public.portfolio(published, featured);
+create index if not exists idx_portfolio_published on public.portfolio(published, featured);
 
--- 첨부파일 (jsonb attachments 가 이미 base64 보관 중이라 이 테이블은 메타만 보관)
-create table if not exists public.progress_attachments (
-  id uuid primary key default gen_random_uuid(),
-  update_id uuid not null references public.progress_updates(id) on delete cascade,
-  name text not null,
-  size_bytes bigint not null,
-  mime_type text not null,
-  data_url text not null,
-  uploaded_at timestamptz not null default now()
-);
-create index if not exists idx_progress_attachments_update_id
-  on public.progress_attachments(update_id);
-
--- ============================================================
---  파트너 신청 (partner_applications)
---  · 인테리어·시공 협력업체가 등록 신청할 때 사용하는 테이블
---  · 일반 사용자(anon)는 INSERT 만 가능 — 자기 신청 등록 후 SELECT 불가
---  · 관리자(authenticated)만 SELECT / UPDATE 가능 — 심사·승인·반려 처리
---  · 모든 도메인 데이터는 jsonb 컬럼에 통합 저장 (스키마 진화 용이)
--- ============================================================
+-- 파트너 신청
 create table if not exists public.partner_applications (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-
-  -- 'submitted' (접수) | 'reviewing' (검토중) | 'approved' (승인) | 'rejected' (반려)
   status text not null default 'submitted'
     check (status in ('submitted','reviewing','approved','rejected')),
-
-  -- 사업자/담당자/회사정보 (PartnerBusinessInfo)
   business jsonb not null,
-  -- 시공 사례 목록 (PartnerCase[])
   cases jsonb not null default '[]',
-  -- 실적/전문분야 (PartnerPerformance)
   performance jsonb not null,
-  -- 동의 항목 (PartnerAgreement)
   agreement jsonb not null,
-
-  -- 신청자 자유 메모
   note text,
-
-  -- 관리자 코멘트 (반려 사유 등)
   admin_memo text,
-  -- 처리 일시 (status 가 approved/rejected 로 바뀐 시각)
   processed_at timestamptz,
-
-  -- (선택) 검증용 — 신청자 이메일을 별도 인덱스 컬럼으로 복제
-  applicant_email text generated always as (
-    (business->'contactEmail')::text
-  ) stored,
-  applicant_company text generated always as (
-    (business->'companyName')::text
-  ) stored
+  applicant_email text generated always as ((business->>'contactEmail')) stored,
+  applicant_company text generated always as ((business->>'companyName')) stored
 );
-create index if not exists idx_partner_apps_created_at_desc
-  on public.partner_applications(created_at desc);
-create index if not exists idx_partner_apps_status
-  on public.partner_applications(status);
-create index if not exists idx_partner_apps_applicant_email
-  on public.partner_applications(applicant_email);
+create index if not exists idx_partner_apps_created_at_desc on public.partner_applications(created_at desc);
+create index if not exists idx_partner_apps_status on public.partner_applications(status);
 
--- ---------- 2. RLS (Row Level Security) ----------
--- ForgeDB 는 anon/authenticated 외의 role 명이 다를 수 있으므로
--- 모든 정책을 TO PUBLIC 으로 두고 내부에서 forge_role() / forge_uid() 로 분기합니다.
--- 추가로 share_token 기반 조회용 헬퍼:
-create or replace function public.forge_share_token()
-returns text
-language sql
-stable
-as $
-  select nullif(
-    current_setting('request.jwt.claim.token', true),
-    ''
-  );
-$;
+-- ---------- 3. RLS (Row Level Security) ----------
 
+-- 모든 테이블에 RLS 활성화
+alter table public.user_profiles enable row level security;
+alter table public.partners enable row level security;
+alter table public.partner_portfolios enable row level security;
 alter table public.quotes enable row level security;
 alter table public.progress_updates enable row level security;
 alter table public.portfolio enable row level security;
-alter table public.progress_attachments enable row level security;
 alter table public.partner_applications enable row level security;
 
--- ----- quotes -----
--- 누구나 등록 가능 (고객 견적 신청). 생성 시 share_token 은 자동 생성됩니다.
+-- user_profiles
+-- 사용자는 자신의 프로필만 보거나 수정할 수 있습니다.
+drop policy if exists "user_profiles_select_own" on public.user_profiles;
+create policy "user_profiles_select_own" on public.user_profiles for select
+  using (id = public.forge_uid());
+drop policy if exists "user_profiles_update_own" on public.user_profiles;
+create policy "user_profiles_update_own" on public.user_profiles for update
+  using (id = public.forge_uid());
+
+-- partners
+-- 파트너는 자신의 정보만 보거나 수정할 수 있습니다. 관리자는 모든 파트너 정보를 봅니다.
+drop policy if exists "partners_select_own_or_admin" on public.partners;
+create policy "partners_select_own_or_admin" on public.partners for select
+  using (user_id = public.forge_uid() or public.forge_role() = 'admin');
+drop policy if exists "partners_update_own" on public.partners;
+create policy "partners_update_own" on public.partners for update
+  using (user_id = public.forge_uid());
+-- 파트너 정보 생성은 관리자만 가능 (승인 프로세스)
+drop policy if exists "partners_insert_admin" on public.partners;
+create policy "partners_insert_admin" on public.partners for insert
+  with check (public.forge_role() = 'admin');
+
+-- partner_portfolios
+-- 파트너는 자신의 포트폴리오를 생성, 조회, 수정, 삭제할 수 있습니다.
+-- 일반 사용자와 관리자는 published=true인 포트폴리오만 볼 수 있습니다.
+drop policy if exists "partner_portfolios_select_published_or_own" on public.partner_portfolios;
+create policy "partner_portfolios_select_published_or_own" on public.partner_portfolios for select
+  using (published = true or (select p.user_id from public.partners p where p.id = partner_id) = public.forge_uid());
+drop policy if exists "partner_portfolios_manage_own" on public.partner_portfolios;
+create policy "partner_portfolios_manage_own" on public.partner_portfolios for all
+  using ((select p.user_id from public.partners p where p.id = partner_id) = public.forge_uid());
+-- 관리자는 모든 포트폴리오를 관리할 수 있습니다.
+drop policy if exists "partner_portfolios_admin_full_access" on public.partner_portfolios;
+create policy "partner_portfolios_admin_full_access" on public.partner_portfolios for all
+  using (public.forge_role() = 'admin');
+
+
+-- quotes (기존 정책 유지)
 drop policy if exists "quotes_insert_public" on public.quotes;
-create policy "quotes_insert_public"
-  on public.quotes for insert
-  with check (true);
-
--- ⚠️ PII 보호: SELECT 는 (a) 관리자(authenticated), (b) share_token 일치, 둘 중 하나만 허용.
--- 그 외의 anon 사용자는 다른 사람의 quote 를 절대 볼 수 없습니다.
+create policy "quotes_insert_public" on public.quotes for insert with check (true);
 drop policy if exists "quotes_select_scoped" on public.quotes;
-create policy "quotes_select_scoped"
-  on public.quotes for select
-  using (
-    public.forge_role() = 'authenticated'
-    OR share_token::text = public.forge_share_token()
-  );
-
--- 수정/삭제는 인증된 사용자(관리자)만
+create policy "quotes_select_scoped" on public.quotes for select using (public.forge_role() = 'authenticated' OR share_token::text = public.forge_share_token());
 drop policy if exists "quotes_update_admin" on public.quotes;
-create policy "quotes_update_admin"
-  on public.quotes for update
-  using (public.forge_role() = 'authenticated')
-  with check (public.forge_role() = 'authenticated');
-
+create policy "quotes_update_admin" on public.quotes for update using (public.forge_role() = 'authenticated');
 drop policy if exists "quotes_delete_admin" on public.quotes;
-create policy "quotes_delete_admin"
-  on public.quotes for delete
-  using (public.forge_role() = 'authenticated');
+create policy "quotes_delete_admin" on public.quotes for delete using (public.forge_role() = 'authenticated');
 
--- ----- portfolio.images 컬럼 마이그레이션 -----
--- 기존 스키마에 images 가 없을 수 있으므로 별도 ALTER 로 안전하게 추가합니다.
-alter table public.portfolio
-  add column if not exists images text[] not null default '{}';
-
--- ----- progress_updates -----
--- ⚠️ forge_role() 만 체크하면 누구나 author_role='admin' 으로 위조 가능.
--- 인증된 사용자(=관리자)만 admin/system role 사용 가능하도록 WITH CHECK 를 강화합니다.
--- - anon:  author_role IN ('customer','system') + visible_to_customer = true
--- - authenticated: 어떤 role 도 허용 (관리자 권한)
+-- progress_updates (기존 정책 유지)
 drop policy if exists "progress_insert_typed" on public.progress_updates;
-create policy "progress_insert_typed"
-  on public.progress_updates for insert
-  with check (
-    case public.forge_role()
-      when 'authenticated' then true
-      else
-        author_role in ('customer','system')
-        and visible_to_customer = true
-    end
-  );
-
--- 조회는 visible_to_customer=true 인 경우 모두 허용, 관리자는 전부 허용
+create policy "progress_insert_typed" on public.progress_updates for insert with check (case public.forge_role() when 'authenticated' then true else author_role in ('customer','system') and visible_to_customer = true end);
 drop policy if exists "progress_select_visible" on public.progress_updates;
-create policy "progress_select_visible"
-  on public.progress_updates for select
-  using (
-    visible_to_customer = true
-    OR public.forge_role() = 'authenticated'
-  );
-
--- 수정/삭제는 관리자만
+create policy "progress_select_visible" on public.progress_updates for select using (visible_to_customer = true OR public.forge_role() = 'authenticated');
 drop policy if exists "progress_update_admin" on public.progress_updates;
-create policy "progress_update_admin"
-  on public.progress_updates for update
-  using (public.forge_role() = 'authenticated')
-  with check (public.forge_role() = 'authenticated');
-
+create policy "progress_update_admin" on public.progress_updates for update using (public.forge_role() = 'authenticated');
 drop policy if exists "progress_delete_admin" on public.progress_updates;
-create policy "progress_delete_admin"
-  on public.progress_updates for delete
-  using (public.forge_role() = 'authenticated');
+create policy "progress_delete_admin" on public.progress_updates for delete using (public.forge_role() = 'authenticated');
 
--- ----- portfolio -----
+-- portfolio (기존 정책 유지)
 drop policy if exists "portfolio_select_published" on public.portfolio;
-create policy "portfolio_select_published"
-  on public.portfolio for select
-  using (published = true OR public.forge_role() = 'authenticated');
-
+create policy "portfolio_select_published" on public.portfolio for select using (published = true OR public.forge_role() = 'authenticated');
 drop policy if exists "portfolio_write_admin" on public.portfolio;
-create policy "portfolio_write_admin"
-  on public.portfolio for all
-  using (public.forge_role() = 'authenticated')
-  with check (public.forge_role() = 'authenticated');
+create policy "portfolio_write_admin" on public.portfolio for all using (public.forge_role() = 'authenticated');
 
--- ----- progress_attachments -----
-drop policy if exists "attachments_select_public" on public.progress_attachments;
-create policy "attachments_select_public"
-  on public.progress_attachments for select
-  using (true);
-
-drop policy if exists "attachments_insert_public" on public.progress_attachments;
-create policy "attachments_insert_public"
-  on public.progress_attachments for insert
-  with check (true);
-
-drop policy if exists "attachments_write_admin" on public.progress_attachments;
-create policy "attachments_write_admin"
-  on public.progress_attachments for all
-  using (public.forge_role() = 'authenticated')
-  with check (public.forge_role() = 'authenticated');
-
--- ----- partner_applications -----
--- ⚠️ 일반 사용자(anon)는 INSERT 만 가능합니다. 신청 후 결과를 조회할 수 없도록
--- SELECT 는 관리자(authenticated)만 허용 — 결과는 이메일로만 통보.
+-- partner_applications (기존 정책 유지)
 drop policy if exists "partner_insert_public" on public.partner_applications;
-create policy "partner_insert_public"
-  on public.partner_applications for insert
-  with check (true);
-
+create policy "partner_insert_public" on public.partner_applications for insert with check (true);
 drop policy if exists "partner_select_admin" on public.partner_applications;
-create policy "partner_select_admin"
-  on public.partner_applications for select
-  using (public.forge_role() = 'authenticated');
-
+create policy "partner_select_admin" on public.partner_applications for select using (public.forge_role() = 'authenticated');
 drop policy if exists "partner_update_admin" on public.partner_applications;
-create policy "partner_update_admin"
-  on public.partner_applications for update
-  using (public.forge_role() = 'authenticated')
-  with check (public.forge_role() = 'authenticated');
-
+create policy "partner_update_admin" on public.partner_applications for update using (public.forge_role() = 'authenticated');
 drop policy if exists "partner_delete_admin" on public.partner_applications;
-create policy "partner_delete_admin"
-  on public.partner_applications for delete
-  using (public.forge_role() = 'authenticated');
+create policy "partner_delete_admin" on public.partner_applications for delete using (public.forge_role() = 'authenticated');
 
--- ===========================================================
---  3. Realtime 활성화
---  실시간 구독이 필요한 테이블을 publication 에 추가합니다.
---  콘솔 UI 가 있다면 그것으로 추가해도 동일합니다.
---  publication 이 아직 없다면 만들어두고, 이미 있으면 그대로 사용합니다.
--- ===========================================================
-do $
+
+-- ---------- 4. Realtime 활성화 ----------
+do $$
 begin
-  if not exists (
-    select 1 from pg_publication where pubname = 'supabase_realtime'
-  ) then
+  if not exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
     create publication supabase_realtime;
   end if;
-end $;
+end $$;
 
--- 멱등성을 위해 pg_publication_tables 에 존재하지 않을 때만 추가합니다.
-do $
-begin
-  if not exists (
-    select 1 from pg_publication_tables
-    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'quotes'
-  ) then
-    execute 'alter publication supabase_realtime add table public.quotes';
-  end if;
-  if not exists (
-    select 1 from pg_publication_tables
-    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'progress_updates'
-  ) then
-    execute 'alter publication supabase_realtime add table public.progress_updates';
-  end if;
-  if not exists (
-    select 1 from pg_publication_tables
-    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'portfolio'
-  ) then
-    execute 'alter publication supabase_realtime add table public.portfolio';
-  end if;
-  if not exists (
-    select 1 from pg_publication_tables
-    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'partner_applications'
-  ) then
-    execute 'alter publication supabase_realtime add table public.partner_applications';
-  end if;
-end $;
-
--- ===========================================================
---  4. 데모 데이터 시드 (포트폴리오만 — quote/review 는 사용자가 직접 등록)
---  콘솔에서 1회 실행 후 주석 처리하세요.
--- ===========================================================
--- insert into public.portfolio (title, category, space_type, area, location, year,
---   duration_weeks, budget, description, cover_color, cover_accent, tags, featured, published)
--- values
---   ('한남동 모던 하우스', 'residential', '단독주택', 42, '서울 용산구', 2024, 10,
---    '1억~1.5억', '한남동의 정원뷰를 살린 42평 단독주택 풀 리모델링',
---    '#1a3a6e', '#c9a961', array['모던','내추럴','단독주택'], true, true),
---   ('판교 주상복합 34평', 'residential', '아파트', 34, '경기 성남시', 2024, 6,
---    '4,000~4,500만원', '젊은 부부의 첫 신혼집 — 미니멀 + 우드',
---    '#0b3d91', '#d8b873', array['미니멀','신혼','우드'], true, true),
---   ('강남 오피스 리모델링', 'commercial', '오피스', 80, '서울 강남구', 2023, 8,
---    '1.5억 이상', 'IT 스타트업 본사 — 글래스 파티션 + 브랜드 컬러',
---    '#082b6b', '#c9a961', array['오피스','브랜드','글래스'], false, true);
+alter publication supabase_realtime add table
+  public.quotes,
+  public.progress_updates,
+  public.portfolio,
+  public.partner_applications,
+  public.user_profiles,
+  public.partners,
+  public.partner_portfolios;

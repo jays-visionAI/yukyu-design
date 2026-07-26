@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<title>e2e seo input trigger</title>
+</head>
+<body style="font-family:monospace;font-size:11px">
+<div id="root">
+  <iframe id="frame" src="/admin/seo" style="width:1280px;height:1600px;border:0;display:block"></iframe>
+  <pre id="out" style="white-space:pre-wrap;background:#222;color:#0f0;padding:8px"></pre>
+</div>
+<script>
+  // 1) 어드민 인증 플래그 세팅
+  try { localStorage.setItem('yukye_design_admin_auth_v1', '1'); } catch (e) {}
+
+  const out = document.getElementById('out');
+  const frame = document.getElementById('frame');
+  function log(msg) { out.textContent += msg + '\n'; }
+
+  frame.addEventListener('load', function () {
+    setTimeout(runTest, 800);
+  });
+
+  function runTest() {
+    try {
+      const win = frame.contentWindow;
+      const doc = frame.contentDocument;
+      if (!doc) { log('iframe 접근 불가'); return; }
+
+      // 페이지 내 h1 확인
+      const h1 = doc.querySelector('h1');
+      log('h1: ' + (h1 ? h1.textContent : '(없음)'));
+
+      // 저장 버튼 찾기
+      const saveBtn = Array.from(doc.querySelectorAll('button')).find(
+        (b) => b.textContent && b.textContent.trim() === '저장'
+      );
+      if (!saveBtn) { log('저장 버튼 없음'); return; }
+      log('[시작] 저장 버튼 disabled=' + saveBtn.disabled);
+
+      // siteTitle input 찾기 (Overview 탭의 빠른 편집 Input)
+      const inputs = doc.querySelectorAll('input.input');
+      log('input 개수: ' + inputs.length);
+      const titleInput = Array.from(inputs).find(function (i) {
+        const lbl = i.closest('.field')?.querySelector('.field-label')?.textContent || '';
+        return lbl.includes('사이트 제목') || i.value.includes('Yukyu Design');
+      });
+      if (!titleInput) { log('사이트 제목 입력 못 찾음'); return; }
+      log('입력 필드 현재 값: ' + JSON.stringify(titleInput.value));
+
+      // React native input setter 사용
+      const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      nativeSetter.call(titleInput, titleInput.value + ' ✨');
+      titleInput.dispatchEvent(new Event('input', { bubbles: true }));
+      titleInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+      // React 가 상태 갱신 + 리렌더할 시간
+      setTimeout(function () {
+        // 저장 버튼 다시 찾기 (리렌더 후)
+        const newSaveBtn = Array.from(doc.querySelectorAll('button')).find(
+          (b) => b.textContent && b.textContent.trim() === '저장'
+        );
+        if (newSaveBtn) {
+          log('[입력 후] 저장 버튼 disabled=' + newSaveBtn.disabled);
+          log('성공 여부: ' + (newSaveBtn.disabled ? '❌ 여전히 비활성' : '✅ 활성화됨'));
+        } else {
+          log('저장 버튼 사라짐');
+        }
+        log('입력 필드 새 값: ' + titleInput.value);
+      }, 400);
+    } catch (e) {
+      log('에러: ' + (e && e.message ? e.message : e));
+    }
+  }
+</script>
+</body>
+</html>

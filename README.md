@@ -85,6 +85,47 @@ VITE_FORGEDB_ANON_KEY=your_anon_key
 
 환경변수가 비어 있으면 자동으로 `local` 모드로 동작합니다 — `localStorage` + 시드 데이터 5건 + `admin` / `1234` 로그인. 배포 전에 데모 미리보기·로컬 개발이 끊김 없이 동작합니다.
 
+
+## 커스텀 도메인 연결
+
+`https://<slug>.forgedb.app` 으로 배포된 사이트를 본인 도메인(예: `yukyu.kr`)으로 운영하려면:
+
+### 1단계: 환경변수 설정
+
+`.env` 파일에 (또는 ForgeDB 콘솔 환경설정):
+
+```env
+VITE_PUBLIC_SITE_URL=https://yukyu.kr
+```
+
+> 빈 값이면 코드 기본값 `https://yukyu.kr` 으로 동작합니다. SEO 설정 페이지(`/admin/seo`)에서 다시 변경할 수도 있습니다.
+
+### 2단계: DNS 레코드 설정
+
+구매한 등록기관(가비아 / 카페24 / Cloudflare 등)에서:
+
+| 호스트 | 타입 | 값 |
+|--------|------|-----|
+| `www` | CNAME | `<배포슬러그>.forgedb.app` |
+| `@` (apex) | A | ForgeDB 콘솔이 안내한 IP |
+
+### 3단계: ForgeDB 콘솔에서 도메인 등록
+
+`Hosting` 메뉴 → **Add Custom Domain** → `yukyu.kr` 입력. SSL 인증서는 자동 발급 (5~30분).
+
+### 상세 가이드
+
+- 가비아 도메인: [`docs/domain-setup-gabia.md`](docs/domain-setup-gabia.md)
+- 다른 등록기관도 같은 패턴 (CNAME www + A apex)
+
+### 운영 전 체크
+
+- [ ] `https://도메인` 직접 접속 → 정상 렌더 + 자물쇠(SSL)
+- [ ] `/sitemap.xml`, `/robots.txt` 절대 URL이 새 도메인으로 출력
+- [ ] `/admin/seo` 대시보드 미리보기에 `https://도메인` 표시
+- [ ] Google Search Console / Naver Search Advisor 에 도메인 등록 + 소유 확인
+
+
 ## 실행
 
 ```bash

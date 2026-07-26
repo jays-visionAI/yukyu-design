@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<title>e2e seo full flow</title>
+</head>
+<body style="font-family:monospace;font-size:11px;margin:0">
+<iframe id="frame" src="/admin/login" style="width:1280px;height:1600px;border:0;display:block"></iframe>
+<pre id="out" style="white-space:pre-wrap;background:#222;color:#0f0;padding:8px"></pre>
+<script>
+  const out = document.getElementById('out');
+  const frame = document.getElementById('frame');
+  function log(msg) { out.textContent += msg + '\n'; }
+
+  frame.addEventListener('load', async function () {
+    try {
+      const doc = frame.contentDocument;
+      if (!doc) { log('iframe 접근 불가'); return; }
+      // 1) iframe 내에서 /admin/seo 로 직접 이동
+      log('iframe → /admin/seo 직접 이동');
+      frame.src = '/admin/seo';
+    } catch (e) { log('에러: ' + e); }
+  });
+
+  // iframe 이 /admin/seo 로 이동한 후 다시 load 이벤트가 발생
+  frame.addEventListener('load', async function once() {
+    try {
+      const doc = frame.contentDocument;
+      if (!doc) return;
+      const path = frame.contentWindow.location.pathname;
+      log('iframe 현재 경로: ' + path);
+      if (path !== '/admin/seo') {
+        // 아직 /admin/seo 가 아니면 곧 다시 load 이벤트가 옴
+        if (path === '/admin/login') {
+          log('RequireAdmin 가드가 /admin/login 으로 redirect 함 — localStorage 확인 필요');
+          // 직접 setItem 후 다시 시도
+          try { frame.contentWindow.localStorage.setItem('yukye_design_admin_auth_v1', '1'); } catch (e) {}
+          log('iframe → /admin/seo 재시도');
+          frame.removeEventListener('load', once);
+          frame.src = '/admin/seo';
+          frame.addEventListener('load', once);
+          return;
+        }
+        return;
+      }
+
+      // 여기 도착하면 /admin/seo 가 iframe 안에서 정상 렌더됨
+      log('/admin/seo 도착');
+
+      // 저장 버튼 찾기
+      const saveBtn = Array.from(doc.querySelectorAll('button')).find(
+        (b) => b.textContent && b.textContent.trim() === '저장'
+      );
+      if (!saveBtn) { log('저장 버튼 없음'); return; }
+      log('[시작] 저장 버튼 disabled=' + saveBtn.disabled);
+
+      // 사이트 제목 input 찾기
+      const inputs = doc.querySelectorAll('input.input');
+      log('input 개수: ' + inputs.length);
+      const titleInput = Array.from(inputs).find(function (i) {
+        return i.value && i.value.includes('Yukyu Design');
+      });
+      if (!titleInput) { log('사이트 제목 입력 못 찾음'); return; }
+      log('입력 필드 현재 값: ' + JSON.stringify(titleInput.value));
+
+      // React native input setter 로 변경 + event dispatch
+      const win = frame.contentWindow;
+      const nativeSetter = Object.getOwnPropertyDescriptor(win.HTMLInputElement.prototype, 'value').set;
+      nativeSetter.call(titleInput, titleInput.value + ' ✨');
+      titleInput.dispatchEvent(new win.Event('input', { bubbles: true }));
+
+      setTimeout(function () {
+        const newSaveBtn = Array.from(doc.querySelectorAll('button')).find(
+          (b) => b.textContent && b.textContent.trim() === '저장'
+        );
+        if (newSaveBtn) {
+          log('[입력 후] 저장 버튼 disabled=' + newSaveBtn.disabled);
+          log('검증 결과: ' + (newSaveBtn.disabled ? '❌ 여전히 비활성 (저장 버튼 결함)' : '✅ 정상 활성화 (저장 가능)'));
+        } else {
+          log('저장 버튼 사라짐');
+        }
+        log('입력 필드 새 값: ' + titleInput.value);
+      }, 400);
+    } catch (e) {
+      log('에러: ' + (e && e.message ? e.message : e));
+    }
+  });
+</script>
+</body>
+</html>

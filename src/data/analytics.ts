@@ -89,6 +89,25 @@ function genId(prefix = 'ev') {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// ------------------------------------------------------------
+//  사이트 기본 도메인 (SEO canonicalUrl / ogImageUrl 의 기본값)
+// ------------------------------------------------------------
+//  우선순위:
+//    1) VITE_PUBLIC_SITE_URL 환경변수 (운영자가 빌드 시점에 주입)
+//    2) 정적 기본값 yukyu.kr (커스텀 도메인 운영 도메인)
+//  절대 https:// 없이 시작하지 말 것 — canonical/og 절대 URL 생성에 사용됨.
+function resolveSiteUrl(): string {
+  try {
+    const fromEnv = (import.meta.env.VITE_PUBLIC_SITE_URL as string | undefined)?.trim();
+    if (fromEnv && /^https?:\/\//i.test(fromEnv)) {
+      return fromEnv.replace(/\/+$/, '');
+    }
+  } catch {
+    /* SSR / import.meta.env 비활성 환경 */
+  }
+  return 'https://yukyu.kr';
+}
+
 export const DEFAULT_SEO: SeoSettings = {
   siteTitle: 'Yukyu Design — 인테리어 시공 · 견적 · 포트폴리오',
   siteDescription:
@@ -101,8 +120,8 @@ export const DEFAULT_SEO: SeoSettings = {
     '인테리어 견적',
     'Yukyu Design',
   ],
-  canonicalUrl: 'https://yukyudesign.com',
-  ogImageUrl: 'https://yukyudesign.com/og-cover.jpg',
+  canonicalUrl: resolveSiteUrl(),
+  ogImageUrl: `${resolveSiteUrl()}/og-cover.jpg`,
   twitterHandle: '@yukyudesign',
   robotsPolicy: 'index,follow',
   sitemapEnabled: true,

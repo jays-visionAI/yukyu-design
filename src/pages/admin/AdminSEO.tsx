@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useAnalytics } from '../../data/AnalyticsContext';
 import { useToast } from '../../components/Toast';
 import type { SeoSettings } from '../../data/analytics';
@@ -10,6 +10,26 @@ import type { SeoSettings } from '../../data/analytics';
 type Tab = 'overview' | 'meta' | 'pages' | 'sitemap' | 'jsonld' | 'tracking';
 
 export default function AdminSEO() {
+  const [renderErr, setRenderErr] = useState<string | null>(null);
+  if (renderErr) {
+    return (
+      <div style={{ padding: 40, color: '#b00', fontFamily: 'monospace' }}>
+        <h2>AdminSEO 렌더 에러</h2>
+        <pre style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{renderErr}</pre>
+      </div>
+    );
+  }
+  try {
+    return AdminSEORender();
+  } catch (e) {
+    const msg = e instanceof Error ? `${e.name}: ${e.message}\n\n${e.stack ?? ''}` : String(e);
+    console.error('[AdminSEO] render error:', msg);
+    setRenderErr(msg);
+    return null;
+  }
+}
+
+function AdminSEORender(): React.ReactElement {
   const { seo, saveSeo, resetSeo } = useAnalytics();
   const toast = useToast();
   const [tab, setTab] = useState<Tab>('overview');
@@ -23,7 +43,6 @@ export default function AdminSEO() {
     () => JSON.stringify({ ...seo, updatedAt: '' }),
     [seo]
   );
-  useEffect(() => setDraft(seo), [seoSignature]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // updatedAt 을 제외한 본문 시그니처로만 비교 → 1초 단위 메타 갱신에
   // 흔들려도 dirty 가 토글되지 않는다.
@@ -31,6 +50,17 @@ export default function AdminSEO() {
     () => JSON.stringify({ ...draft, updatedAt: '' }) !== seoSignature,
     [draft, seoSignature]
   );
+
+  // ⚠️ 핵심: dirty 일 때는 draft 가 사용자 편집 상태이므로 seo 로 덮어쓰지
+  // 않는다. 그렇지 않으면 매 렌더마다 setDraft(seo) 가 호출되어 사용자가 방금
+  // 친 글자가 즉시 원본으로 복원되어 저장 버튼이 절대 켜지지 않는다.
+  // 저장 직후 / 기본값 복원 직후 등 dirty=false 인 시점에만 동기화한다.
+  // 의존성에 dirty 를 포함시켜 dirty 토글 시점에만 effect 가 발화하도록 하고,
+  // signature 비교는 effect 내부에서 수행하여 매 렌더 발동을 방지한다.
+  useEffect(() => {
+    if (!dirty) setDraft(seo);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seoSignature, dirty]);
 
   function apply() {
     saveSeo(draft);

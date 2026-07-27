@@ -167,6 +167,7 @@ export default function PartnerApply() {
           completedYear: new Date().getFullYear(),
           materials: '',
           description: '',
+          photos: [],
         },
       ],
     }));
@@ -236,6 +237,18 @@ export default function PartnerApply() {
     });
   }, [draft.cases]);
 
+  const hasCaseDetails = draft.cases.some(
+    (c) =>
+      c.title.trim() ||
+      c.spaceType.trim() ||
+      c.areaSize > 0 ||
+      c.location.trim() ||
+      c.durationWeeks > 0 ||
+      c.budget.trim() ||
+      c.description.trim() ||
+      (c.photos?.length ?? 0) > 0
+  );
+
   const performanceErrors = useMemo(() => {
     const e: Record<string, string> = {};
     const p = draft.performance;
@@ -267,6 +280,7 @@ export default function PartnerApply() {
 
   const step1Valid = Object.keys(businessErrors).length === 0;
   const step2Valid =
+    draft.cases.length > 0 &&
     casesErrors.every((e) => Object.keys(e).length === 0) &&
     Object.keys(performanceErrors).length === 0;
   const step3Valid = Object.keys(agreementErrors).length === 0;
@@ -281,12 +295,23 @@ export default function PartnerApply() {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else if (step === 2) {
       if (!step2Valid) {
-        toast.push('시공 사례와 실적 정보를 모두 입력해 주세요.');
+        toast.push('시공 사례와 실적 정보를 모두 입력하거나 나중에 입력해 주세요.');
         return;
       }
       setStep(3);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
+  };
+
+  const deferCaseDetails = () => {
+    setDraft((d) => ({
+      ...d,
+      cases: [],
+      performance: emptyPartnerDraft().performance,
+    }));
+    setStep(3);
+    toast.push('시공 사례와 실적은 나중에 제출할 수 있어요.');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const goPrev = () => {
@@ -302,9 +327,9 @@ export default function PartnerApply() {
       toast.push('필수 동의 항목에 모두 동의해 주세요.');
       return;
     }
-    if (!step1Valid || !step2Valid) {
+    if (!step1Valid || (hasCaseDetails && !step2Valid)) {
       toast.push('입력 내용을 다시 확인해 주세요.');
-      setStep(1);
+      setStep(step1Valid ? 2 : 1);
       return;
     }
     const app = submitApplication(draft);
@@ -427,9 +452,16 @@ export default function PartnerApply() {
                 {step}/3 단계
               </span>
               {step < 3 ? (
-                <button type="button" onClick={goNext} className="btn btn-primary">
-                  다음 단계 →
-                </button>
+                <>
+                  {step === 2 && (
+                    <button type="button" onClick={deferCaseDetails} className="btn btn-outline">
+                      나중에 입력하기
+                    </button>
+                  )}
+                  <button type="button" onClick={goNext} className="btn btn-primary">
+                    다음 단계 →
+                  </button>
+                </>
               ) : (
                 <button type="submit" className="btn btn-primary">
                   신청 제출하기
@@ -694,6 +726,40 @@ function StepCasesPerformance({
   onSpecialtyToggle: (sp: PartnerBusinessType) => void;
   onRegionToggle: (region: string) => void;
 }) {
+  const [photoError, setPhotoError] = useState<Record<number, string>>({});
+
+  const handlePhotoUpload = (idx: number, files: FileList | null) => {
+    if (!files) return;
+    const current = cases[idx].photos ?? [];
+    const selected = Array.from(files);
+    const valid = selected.filter(
+      (file) => file.type.startsWith('image/') && file.size <= 5 * 1024 * 1024
+    );
+    const available = Math.max(0, 5 - current.length);
+    if (valid.length !== selected.length) {
+      setPhotoError((prev) => ({ ...prev, [idx]: '이미지 파일만 장당 5MB 이하로 올려 주세요.' }));
+    } else if (valid.length > available) {
+      setPhotoError((prev) => ({ ...prev, [idx]: '사진은 사례당 최대 5장까지 올릴 수 있어요.' }));
+    } else {
+      setPhotoError((prev) => ({ ...prev, [idx]: '' }));
+    }
+    valid.slice(0, available).forEach((file) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          if (typeof reader.result !== 'string') return;
+          const latest = cases[idx].photos ?? [];
+          if (latest.length >= 5) return;
+          onCaseChange(idx, {
+            photos: [
+              ...latest,
+              { dataUrl: reader.result, name: file.name, type: file.type, size: file.size },
+            ],
+          });
+        };
+        reader.readAsDataURL(file);
+      });
+  };
+
   return (
     <div className="stack" style={{ gap: 24 }}>
       {/* 시공 사례 */}
@@ -875,6 +941,68 @@ function StepCasesPerformance({
                     />
                   }
                 />
+                <Field
+                  label="시공 사진"
+                  hint="JPG, PNG, WEBP · 장당 5MB 이하 · 최대 5장"
+                  fullWidth
+                >
+                  <input
+                    className="input"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    multiple
+                    disabled={(c.photos?.length ?? 0) >= 5}
+                    onChange={(e) => {
+                      handlePhotoUpload(idx, e.target.files);
+                      e.currentTarget.value = '';
+                    }}
+                  />
+                  {(c.photos?.length ?? 0) > 0 && (
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(112px, 1fr))',
+                        gap: 10,
+                      }}
+                    >
+                      {c.photos.map((photo, photoIdx) => (
+                        <div key={`${photo.name}-${photoIdx}`} style={{ position: 'relative' }}>
+                          <img
+                            src={photo.dataUrl}
+                            alt={`${c.title || `사례 ${idx + 1}`} 시공 사진 ${photoIdx + 1}`}
+                            style={{
+                              width: '100%',
+                              aspectRatio: '4 / 3',
+                              objectFit: 'cover',
+                              borderRadius: 'var(--radius-sm)',
+                              border: '1px solid var(--color-border)',
+                            }}
+                          />
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            aria-label={`${photo.name} 삭제`}
+                            onClick={() =>
+                              onCaseChange(idx, {
+                                photos: c.photos.filter((_, i) => i !== photoIdx),
+                              })
+                            }
+                            style={{
+                              position: 'absolute',
+                              top: 4,
+                              right: 4,
+                              padding: '2px 7px',
+                              background: 'rgba(255,255,255,0.92)',
+                            }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {photoError[idx] && <p className="field-error">{photoError[idx]}</p>}
+                </Field>
               </div>
             </div>
           );
@@ -1067,7 +1195,7 @@ function StepAgreement({
             ['대표자', draft.business.ceoName],
             ['사업자구분', PARTNER_SPECIALTY_LABELS[draft.business.businessType]],
             ['담당자', `${draft.business.contactName} (${draft.business.contactEmail})`],
-            ['시공 사례', `${draft.cases.length}건`],
+            ['시공 사례', draft.cases.length ? `${draft.cases.length}건` : '나중에 입력'],
             [
               '누적 실적',
               `${draft.performance.totalProjects}건 / 최근 1년 ${draft.performance.recentYearProjects}건`,

@@ -42,6 +42,17 @@ export interface PartnerBusinessInfo {
   websiteUrl?: string;
 }
 
+export interface PartnerCasePhoto {
+  /** 브라우저에서 미리보기 가능한 이미지 data URL */
+  dataUrl: string;
+  /** 원본 파일명 */
+  name: string;
+  /** MIME 타입 */
+  type: string;
+  /** 파일 크기(byte) */
+  size: number;
+}
+
 export interface PartnerCase {
   /** 시공 사례 제목 */
   title: string;
@@ -61,6 +72,8 @@ export interface PartnerCase {
   materials?: string;
   /** 간단한 설명 */
   description: string;
+  /** 시공 사례 사진 (최대 5장) */
+  photos: PartnerCasePhoto[];
 }
 
 export interface PartnerPerformance {
@@ -200,6 +213,7 @@ export function emptyPartnerDraft(): Omit<
         completedYear: new Date().getFullYear(),
         materials: '',
         description: '',
+        photos: [],
       },
     ],
     performance: {

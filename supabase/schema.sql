@@ -169,6 +169,30 @@ create table if not exists public.portfolio (
 );
 create index if not exists idx_portfolio_published on public.portfolio(published, featured);
 
+-- 스튜디오 아파트 및 표준 유닛 평면
+create table if not exists public.apartments (
+  id text primary key,
+  created_at timestamptz not null default now(),
+  brand text not null,
+  name text not null,
+  location text not null,
+  published boolean not null default true
+);
+create index if not exists idx_apartments_brand on public.apartments(brand, name);
+
+create table if not exists public.apartment_units (
+  id text primary key,
+  apartment_id text not null references public.apartments(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  name text not null,
+  area integer not null check (area > 0),
+  bedrooms integer not null check (bedrooms >= 0),
+  bathrooms integer not null check (bathrooms >= 0),
+  plan jsonb not null,
+  published boolean not null default true
+);
+create index if not exists idx_apartment_units_apartment_id on public.apartment_units(apartment_id);
+
 -- 파트너 신청
 create table if not exists public.partner_applications (
   id uuid primary key default gen_random_uuid(),
@@ -198,6 +222,8 @@ alter table public.partner_portfolios enable row level security;
 alter table public.quotes enable row level security;
 alter table public.progress_updates enable row level security;
 alter table public.portfolio enable row level security;
+alter table public.apartments enable row level security;
+alter table public.apartment_units enable row level security;
 alter table public.partner_applications enable row level security;
 
 -- user_profiles
@@ -263,6 +289,17 @@ create policy "portfolio_select_published" on public.portfolio for select using 
 drop policy if exists "portfolio_write_admin" on public.portfolio;
 create policy "portfolio_write_admin" on public.portfolio for all using (public.forge_role() = 'authenticated');
 
+-- apartments / apartment_units
+-- 공개된 표준 유닛은 누구나 조회하고, 관리자는 데이터를 관리합니다.
+drop policy if exists "apartments_select_published" on public.apartments;
+create policy "apartments_select_published" on public.apartments for select using (published = true OR public.forge_role() = 'authenticated');
+drop policy if exists "apartments_write_admin" on public.apartments;
+create policy "apartments_write_admin" on public.apartments for all using (public.forge_role() = 'authenticated');
+drop policy if exists "apartment_units_select_published" on public.apartment_units;
+create policy "apartment_units_select_published" on public.apartment_units for select using (published = true OR public.forge_role() = 'authenticated');
+drop policy if exists "apartment_units_write_admin" on public.apartment_units;
+create policy "apartment_units_write_admin" on public.apartment_units for all using (public.forge_role() = 'authenticated');
+
 -- partner_applications (기존 정책 유지)
 drop policy if exists "partner_insert_public" on public.partner_applications;
 create policy "partner_insert_public" on public.partner_applications for insert with check (true);
@@ -286,6 +323,8 @@ alter publication supabase_realtime add table
   public.quotes,
   public.progress_updates,
   public.portfolio,
+  public.apartments,
+  public.apartment_units,
   public.partner_applications,
   public.user_profiles,
   public.partners,

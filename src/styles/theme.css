@@ -941,3 +941,221 @@ p {
     font-size: 26px !important;
   }
 }
+
+/* ============================================================
+   Studio — standardized apartment unit renderer
+   ============================================================ */
+.studio-page {
+  padding-top: var(--space-12);
+  padding-bottom: var(--space-16);
+}
+
+.studio-intro {
+  max-width: 760px;
+  margin-bottom: var(--space-8);
+}
+
+.studio-intro h1 {
+  margin: var(--space-2) 0 var(--space-3);
+  font-size: var(--text-3xl);
+}
+
+.studio-intro > p:last-child {
+  color: var(--color-text-secondary);
+  font-size: var(--text-md);
+}
+
+.studio-eyebrow {
+  color: var(--color-accent);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.studio-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  gap: var(--space-8);
+  align-items: start;
+}
+
+.studio-controls {
+  padding: var(--space-6);
+}
+
+.studio-controls > .field-label:not(:first-child) {
+  display: block;
+  margin-top: var(--space-5);
+}
+
+.studio-location,
+.studio-note {
+  color: var(--color-text-tertiary);
+  font-size: var(--text-xs);
+}
+
+.studio-location {
+  margin-top: var(--space-2);
+}
+
+.studio-note {
+  margin-top: var(--space-3);
+}
+
+.studio-unit-meta {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+}
+
+.studio-unit-meta span {
+  padding: 4px 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-muted);
+}
+
+.studio-concepts {
+  border: 0;
+  padding: 0;
+  margin: var(--space-5) 0 var(--space-6);
+}
+
+.studio-concepts > div {
+  display: grid;
+  gap: 10px;
+}
+
+.studio-concepts label {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: border-color var(--transition-base), background var(--transition-base);
+}
+
+.studio-concepts label:hover,
+.studio-concepts label.is-selected {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
+}
+
+.studio-swatch {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+.studio-concepts small {
+  display: block;
+  margin-top: 3px;
+  color: var(--color-text-tertiary);
+}
+
+.studio-preview {
+  overflow: hidden;
+  min-height: 520px;
+  border-radius: var(--radius-xl);
+  background: #e9e2d8;
+  box-shadow: var(--shadow-lg);
+}
+
+.studio-renderer {
+  position: relative;
+  height: 460px;
+  background: #ede8df;
+}
+
+.studio-renderer canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.studio-renderer__top {
+  position: absolute;
+  top: var(--space-6);
+  right: var(--space-6);
+  left: var(--space-6);
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  color: #fff;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.35);
+}
+
+.studio-renderer__top span {
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+}
+
+.studio-preview__caption {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-5) var(--space-6);
+  background: #fff;
+}
+
+.studio-preview__caption strong,
+.studio-preview__caption span {
+  display: block;
+}
+
+.studio-preview__caption div > span {
+  margin-top: 3px;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.studio-quote-cta {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-5);
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: var(--space-8);
+  padding: var(--space-6);
+  border-radius: var(--radius-lg);
+  background: var(--color-primary-light);
+}
+
+.studio-quote-cta p {
+  margin-top: 5px;
+  color: var(--color-text-secondary);
+}
+
+@media (max-width: 900px) {
+  .studio-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .studio-page {
+    padding-top: var(--space-8);
+  }
+  .studio-intro h1 {
+    font-size: var(--text-2xl);
+  }
+  .studio-renderer {
+    height: 360px;
+  }
+  .studio-renderer__top {
+    top: var(--space-4);
+    right: var(--space-4);
+    left: var(--space-4);
+  }
+  .studio-renderer__top span {
+    display: none;
+  }
+  .studio-quote-cta .btn {
+    width: 100%;
+  }
+}

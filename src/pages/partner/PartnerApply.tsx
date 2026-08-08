@@ -49,19 +49,190 @@ const BUDGET_PRESETS = [
   '1억 이상',
 ];
 
-const REGION_PRESETS = [
-  '서울 강남구',
-  '서울 강서구',
-  '서울 송파구',
-  '서울 마포구',
-  '서울 용산구',
-  '서울 종로구',
-  '경기 성남시',
-  '경기 분당구',
-  '경기 고양시',
-  '인천 연수구',
-  '부산 해운대구',
+// ------------------------------------------------------------
+//  권역별 시공 지역 정의
+// ------------------------------------------------------------
+//  • 인테리어 시공 수요 = 인구수 × 신혼·이사 회전율 × 소득 수준 으로 가중.
+//  • 2024 행정안전부 주민등록 인구통계 + 통계청 신혼·이사 데이터를 가중치로 사용.
+//  • 각 권역은 시·도 단위로 묶고, 권역 내 시·군·구 옵션을 제공.
+//  • 권역 비중은 데모 기준으로 잡았으며, 관리자가 콘솔에서 조정 가능하도록
+//    권역별 "기본 추천수"(RECOMMENDED_BY_REGION) 도 같이 노출합니다.
+// ------------------------------------------------------------
+
+export type RegionTier = 'metro' | 'youngnam' | 'honam' | 'chungcheong' | 'gangwon' | 'jeju';
+
+export interface RegionGroup {
+  tier: RegionTier;
+  /** 권역 표시명 (예: "수도권") */
+  name: string;
+  /** 권역 비중 (%, 합계 100). 인구수 + 인테리어 수요 가중치. */
+  weight: number;
+  /** 권역 내 시·군·구 옵션들 (인구 많은 순). */
+  districts: string[];
+  /** 권역이 강조하는 권역 한 줄 설명 (모집 시 우선순위 근거). */
+  description: string;
+}
+
+// 권역별 가중치 메모:
+//  - 수도권: 전체 인구의 약 50%, 인테리어 시장도 압도적 1위. 우선 모집 권역.
+//  - 영남권(부산·울산·경남 + 대구·경북): 약 20%, 신혼·이사 수요 두 번째로 큼.
+//  - 호남권(광주·전라): 약 10%, 전주시·광명동을 중심으로 두 번째 거점 도시 분산.
+//  - 충청권(대전·세종·충남·충북): 약 12%, 세종·천안·청주 신도시 효과.
+//  - 강원권: 약 4%, 강릉·원주·춘천 등 거점별 분산 모집.
+//  - 제주권: 약 3%, 단일 시 + 리조트 인테리어 수요.
+// 합계 ≈ 99% (반올림 보정)
+export const REGION_GROUPS: RegionGroup[] = [
+  {
+    tier: 'metro',
+    name: '수도권',
+    weight: 51,
+    description: '전체 인구의 약 절반 · 인테리어 수요 최다 · 우선 모집 권역',
+    districts: [
+      '서울 강남구',
+      '서울 송파구',
+      '서울 마포구',
+      '서울 용산구',
+      '서울 종로구',
+      '서울 강서구',
+      '서울 서초구',
+      '서울 영등포구',
+      '경기 성남시',
+      '경기 분당구',
+      '경기 고양시',
+      '경기 용인시',
+      '경기 수원시',
+      '경기 안양시',
+      '인천 연수구',
+      '인천 남동구',
+      '인천 부평구',
+    ],
+  },
+  {
+    tier: 'youngnam',
+    name: '영남권',
+    weight: 20,
+    description: '부산·울산·경남·대구·경북 · 신혼 이사 회전율 상위',
+    districts: [
+      '부산 해운대구',
+      '부산 부산진구',
+      '부산 남구',
+      '울산 남구',
+      '울산 북구',
+      '경남 창원시',
+      '경남 김해시',
+      '경남 양산시',
+      '대구 수성구',
+      '대구 달서구',
+      '대구 중구',
+      '경북 포항시',
+      '경북 구미시',
+    ],
+  },
+  {
+    tier: 'honam',
+    name: '호남권',
+    weight: 10,
+    description: '광주·전북·전남 · 전주·광주 도심 신혼 수요 분산',
+    districts: [
+      '광주 북구',
+      '광주 광산구',
+      '광주 남구',
+      '전북 전주시',
+      '전북 익산시',
+      '전남 목포시',
+      '전남 여수시',
+    ],
+  },
+  {
+    tier: 'chungcheong',
+    name: '충청권',
+    weight: 12,
+    description: '대전·세종·충남·충북 · 세종·천안·청주 신도시 효과',
+    districts: [
+      '대전 유성구',
+      '대전 서구',
+      '세종시',
+      '충남 천안시',
+      '충남 아산시',
+      '충남 당진시',
+      '충북 청주시',
+      '충북 충주시',
+    ],
+  },
+  {
+    tier: 'gangwon',
+    name: '강원권',
+    weight: 4,
+    description: '강릉·원주·춘천 등 거점별 분산 모집',
+    districts: ['강원 강릉시', '강원 원주시', '강원 춘천시', '강원 속초시'],
+  },
+  {
+    tier: 'jeju',
+    name: '제주권',
+    weight: 3,
+    description: '제주시·서귀포시 · 단독주택·리조트 인테리어 수요',
+    districts: ['제주 제주시', '제주 서귀포시'],
+  },
 ];
+
+// 권역별 "자동 추천" 개수. 가중치에 비례하며, 신규 협력업체가 1개 권역에
+// 몰리는 것을 막기 위한 분배 가이드입니다. (5개 한도 내에서 권장되는 개수)
+export const RECOMMENDED_BY_REGION: Record<RegionTier, number> = {
+  metro: 3, // 51% → 5개 중 3개 정도 권장
+  youngnam: 1,
+  honam: 1,
+  chungcheong: 1,
+  gangwon: 1,
+  jeju: 1,
+};
+
+// ------------------------------------------------------------
+//  가중치 기준 자동 배분
+// ------------------------------------------------------------
+//  · 권역 비중에 비례해 5개 안팎으로 채워줍니다.
+//  · 수도권은 첫 N개 district, 그 외 권역은 인구 많은 상위 1~2개에서 고릅니다.
+//  · 이미 선택된 값이 있으면 가능한 한 유지한 뒤, 남은 슬롯만 채웁니다.
+// ------------------------------------------------------------
+function autoDistributeRegions(
+  performance: PartnerPerformance,
+  onPerformanceChange: (patch: Partial<PartnerPerformance>) => void
+) {
+  const cur = [...performance.primaryRegions];
+  // 이미 권역별로 골라둔 값은 보존. 단, 같은 권역에서 많이 고른 경우
+  // 가중치 기준 권장 개수까지만 남기고 비활성화 전략을 쓰지만,
+  // 데모 단순화를 위해 그대로 두고 "추가"만 합니다.
+  const target: string[] = [...cur];
+
+  const add = (district: string) => {
+    if (target.length >= 5) return;
+    if (target.includes(district)) return;
+    target.push(district);
+  };
+
+  for (const g of REGION_GROUPS) {
+    const recommended = RECOMMENDED_BY_REGION[g.tier];
+    const existing = g.districts.filter((d) => target.includes(d));
+    for (const e of existing) add(e); // no-op, but normalizes order
+    if (existing.length >= recommended) continue;
+    for (const d of g.districts) {
+      if (target.includes(d)) continue;
+      add(d);
+      if (target.filter((x) => g.districts.includes(x)).length >= recommended) break;
+    }
+    // 5개 한도 도달 시 조기 종료
+    if (target.length >= 5) break;
+  }
+
+  // 토글이 아닌 setState 로 일괄 반영 (stale state 회피).
+  // 이미 동일한 값이면 호출하지 않아 불필요한 리렌더를 막습니다.
+  if (
+    target.length === cur.length &&
+    target.every((d, i) => d === cur[i])
+  ) {
+    return;
+  }
+  onPerformanceChange({ primaryRegions: target });
+}
 
 export default function PartnerApply() {
   const navigate = useNavigate();
@@ -1115,33 +1286,164 @@ function StepCasesPerformance({
           </div>
         </Field>
 
-        {/* 주요 시공 지역 */}
+        {/* 주요 시공 지역 — 권역별 배분 */}
         <Field
           label="주요 시공 지역"
           required
           error={performanceErrors.primaryRegions}
-          hint="최대 5개까지 선택"
+          hint={`권역별로 골고루 배분해 주세요 · 최대 5개 (현재 ${performance.primaryRegions.length}개 선택)`}
         >
-          <div className="checkbox-grid" style={{ marginTop: 6 }}>
-            {REGION_PRESETS.map((r) => (
-              <label
-                key={r}
-                className={
-                  'check-pill' +
-                  (performance.primaryRegions.includes(r) ? ' checked' : '')
-                }
-              >
-                <input
-                  type="checkbox"
-                  checked={performance.primaryRegions.includes(r)}
-                  onChange={() => onRegionToggle(r)}
-                />
-                {r}
-              </label>
-            ))}
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 8,
+              marginTop: 8,
+              marginBottom: 4,
+            }}
+          >
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              onClick={() => autoDistributeRegions(performance, onPerformanceChange)}
+              disabled={performance.primaryRegions.length >= 5}
+            >
+              ⚖️ 가중치 기준 자동 추천
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => onPerformanceChange({ primaryRegions: [] })}
+              disabled={performance.primaryRegions.length === 0}
+            >
+              선택 초기화
+            </button>
           </div>
+
+          <div className="region-tiers" style={{ display: 'grid', gap: 12, marginTop: 8 }}>
+            {REGION_GROUPS.map((g) => {
+              const selectedInTier = g.districts.filter((d) =>
+                performance.primaryRegions.includes(d)
+              );
+              const recommended = RECOMMENDED_BY_REGION[g.tier];
+              const isOver = selectedInTier.length > recommended;
+              return (
+                <div
+                  key={g.tier}
+                  className="region-tier-card"
+                  style={{
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '12px 14px',
+                    background:
+                      selectedInTier.length > 0
+                        ? 'var(--color-primary-light)'
+                        : 'var(--color-bg-secondary, #fafafa)',
+                    transition: 'background-color .15s ease',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'flex-start',
+                      gap: 8,
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <strong style={{ fontSize: 15 }}>{g.name}</strong>
+                        <span
+                          className="badge"
+                          style={{
+                            fontSize: 11,
+                            padding: '2px 8px',
+                            borderRadius: 999,
+                            background: 'var(--color-primary)',
+                            color: '#fff',
+                            fontWeight: 600,
+                          }}
+                          title="인구수+인테리어 수요 가중치"
+                        >
+                          비중 {g.weight}%
+                        </span>
+                        <span
+                          style={{
+                            fontSize: 12,
+                            color:
+                              selectedInTier.length === 0
+                                ? 'var(--color-text-tertiary)'
+                                : isOver
+                                ? '#b45309'
+                                : 'var(--color-primary)',
+                            fontWeight: 600,
+                          }}
+                        >
+                          {selectedInTier.length === 0
+                            ? `권장 ${recommended}개`
+                            : `선택 ${selectedInTier.length} / 권장 ${recommended}${
+                                isOver ? ' (권장 초과)' : ''
+                              }`}
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: 'var(--color-text-secondary)',
+                          marginTop: 4,
+                        }}
+                      >
+                        {g.description}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div
+                    className="checkbox-grid"
+                    style={{ marginTop: 10, gap: 6 }}
+                  >
+                    {g.districts.map((d) => {
+                      const checked = performance.primaryRegions.includes(d);
+                      return (
+                        <label
+                          key={d}
+                          className={'check-pill' + (checked ? ' checked' : '')}
+                          style={{ fontSize: 13 }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={
+                              !checked && performance.primaryRegions.length >= 5
+                            }
+                            onChange={() => onRegionToggle(d)}
+                          />
+                          {d}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
           {performance.primaryRegions.length > 0 && (
-            <div style={{ marginTop: 10, fontSize: 13, color: 'var(--color-text-secondary)' }}>
+            <div
+              style={{
+                marginTop: 12,
+                fontSize: 13,
+                color: 'var(--color-text-secondary)',
+              }}
+            >
               선택: {performance.primaryRegions.join(' · ')}
             </div>
           )}

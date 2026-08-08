@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Landing from './pages/Landing';
+import Studio from './pages/Studio';
 import QuoteStep1 from './pages/quote/QuoteStep1';
 import QuoteStep2 from './pages/quote/QuoteStep2';
 import QuoteDone from './pages/quote/QuoteDone';
@@ -40,6 +41,7 @@ export default function App() {
       <GlobalSeo />
       <Routes>
       <Route path="/" element={<Landing />} />
+      <Route path="/studio" element={<Studio />} />
       <Route path="/quote" element={<QuoteStep1 />} />
       <Route path="/quote/step-2" element={<QuoteStep2 />} />
       <Route path="/quote/done" element={<QuoteDone />} />

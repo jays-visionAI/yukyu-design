@@ -24,6 +24,14 @@ export function Header() {
             홈
           </NavLink>
           <NavLink
+            to="/studio"
+            className={({ isActive }) =>
+              `btn btn-ghost btn-sm ${isActive ? 'is-active' : ''}`
+            }
+          >
+            스튜디오
+          </NavLink>
+          <NavLink
             to="/partner/apply"
             className={({ isActive }) =>
               `btn btn-ghost btn-sm ${isActive ? 'is-active' : ''}`

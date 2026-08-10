@@ -23,7 +23,14 @@ export default function AdminLogin() {
           (location.state as { from?: string } | null)?.from ?? '/admin/dashboard';
         navigate(dest, { replace: true });
       } else {
-        toast.error('아이디 또는 비밀번호가 올바르지 않습니다.');
+        // 데모 키 그대로 입력했는데도 실패했다면 → 백엔드 도달 실패일 가능성이 높음
+        if (id === 'admin' && pw === '1234') {
+          toast.error(
+            '백엔드(ForgeDB)에 연결할 수 없습니다. 네트워크/CORS 상태를 확인해 주세요.'
+          );
+        } else {
+          toast.error('아이디 또는 비밀번호가 올바르지 않습니다.');
+        }
       }
     } finally {
       setSubmitting(false);

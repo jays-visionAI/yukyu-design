@@ -790,6 +790,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setIsAdmin(true);
         return true;
       } catch (err) {
+        // 네트워크/CORS/장애 등 "요청 자체가 백엔드에 닿지 못한" 경우에만
+        // 데모 키 (admin/1234) 로 폴백합니다. 자격증명 오류(401 등)는 위에서 이미
+        // false 로 반환되었으므로 이 catch 로 들어오지 않습니다.
+        // → CORS가 풀리기 전까지 published 사이트에서 어드민을 못 들어가는 상황을
+        //   막기 위한 임시 우회입니다. CORS 가 정상화되면 자동으로 ForgeDB 모드로
+        //   동작합니다.
+        const isDemoKey = id === ADMIN_ID && pw === ADMIN_PW;
+        if (isDemoKey) {
+          console.warn(
+            '[ForgeDB] 백엔드 호출 실패(CORS/네트워크 가능성). 데모 자격증명으로 폴백합니다.'
+          );
+          localStorage.setItem(AUTH_KEY, '1');
+          setIsAdmin(true);
+          return true;
+        }
         console.error('[ForgeDB] adminLogin 실패:', err);
         return false;
       }

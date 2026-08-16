@@ -1,5 +1,6 @@
 import type { Quote, ProgressUpdate, CustomerReview } from './types';
 import type { PortfolioItem } from './portfolio';
+import type { Consultation, ConsultationLog, ConsultationFile, ReferenceLink } from './consultation';
 
 function iso(daysAgo: number, hour = 9) {
   const d = new Date();
@@ -288,4 +289,229 @@ export function seedPortfolio(): PortfolioItem[] {
       createdAt: iso(20),
     },
   ];
+}
+
+// ============================================================
+//  Consultation 시드 — 어드민이 처음 진입했을 때 빈 화면이
+//  되지 않도록 데모용 상담 4건 + 활동 로그 / 첨부 / 링크를
+//  함께 제공합니다. 로컬 모드(localStorage) 에서만 보이며,
+//  ForgeDB 모드에서는 서버 데이터가 우선합니다.
+// ============================================================
+
+export interface SeedConsultationBundle {
+  consultations: Consultation[];
+  logs: Record<string, ConsultationLog[]>;
+  files: Record<string, ConsultationFile[]>;
+  links: Record<string, ReferenceLink[]>;
+}
+
+function isoFull(daysAgo: number, hour = 10, min = 0): string {
+  const d = new Date();
+  d.setDate(d.getDate() - daysAgo);
+  d.setHours(hour, min, 0, 0);
+  return d.toISOString();
+}
+
+function mkShareToken(): string {
+  return `shr_${Math.random().toString(36).slice(2, 10)}${Math.random()
+    .toString(36)
+    .slice(2, 10)}`;
+}
+
+export function seedConsultations(): SeedConsultationBundle {
+  const c1: Consultation = {
+    id: 'cs_seed_001',
+    createdAt: isoFull(0, 9, 30),
+    updatedAt: isoFull(0, 11, 5),
+    name: '김민지',
+    phone: '01012345678',
+    email: 'minji.kim@example.com',
+    apartment: '래미안 원베일리 1101동 1502호',
+    contactPrefs: ['morning', 'afternoon'],
+    moveIn: '1_3m',
+    budget: 'budget_150',
+    remodelScope: 'partial',
+    remodelAreas: ['주방가구', '거실', '안방욕실', '조명'],
+    supplyArea: 32,
+    status: 'received',
+    assignedAdmin: undefined,
+    adminMemo: '',
+    shareToken: mkShareToken(),
+  };
+  const c2: Consultation = {
+    id: 'cs_seed_002',
+    createdAt: isoFull(1, 14, 12),
+    updatedAt: isoFull(1, 14, 12),
+    name: '박준호',
+    phone: '01098765432',
+    email: 'junho.park@example.com',
+    apartment: '동탄 롯데캐슬 203동 804호',
+    contactPrefs: ['evening'],
+    moveIn: 'within_1m',
+    budget: 'budget_200_plus',
+    remodelScope: 'full',
+    remodelAreas: [],
+    supplyArea: 28,
+    status: 'contacted',
+    assignedAdmin: 'admin_choi',
+    adminMemo: '저녁 7시 이후 통화 가능. 빠른 진행 선호.',
+    shareToken: mkShareToken(),
+  };
+  const c3: Consultation = {
+    id: 'cs_seed_003',
+    createdAt: isoFull(3, 16, 40),
+    updatedAt: isoFull(2, 10, 15),
+    name: '이수영',
+    phone: '01055667788',
+    email: undefined,
+    apartment: '힐스테이트 평촌 305동 1101호',
+    contactPrefs: ['any'],
+    moveIn: 'after_3m',
+    budget: 'budget_100',
+    remodelScope: 'styling',
+    remodelAreas: ['도배', '바닥', '조명'],
+    supplyArea: 24,
+    status: 'consulting',
+    assignedAdmin: 'admin_lee',
+    adminMemo: '스타일링 시공 — 도배/바닥 위주. 예산 협의 필요.',
+    shareToken: mkShareToken(),
+  };
+  const c4: Consultation = {
+    id: 'cs_seed_004',
+    createdAt: isoFull(7, 11, 0),
+    updatedAt: isoFull(4, 9, 30),
+    name: '정유진',
+    phone: '01033445566',
+    email: 'yujin.jung@example.com',
+    apartment: '자곡 래미안 108동 502호',
+    contactPrefs: ['morning'],
+    moveIn: '1_3m',
+    budget: 'budget_150',
+    remodelScope: 'partial',
+    remodelAreas: ['아트월', '현관', 'ROOM 1', 'ROOM 2'],
+    supplyArea: 36,
+    status: 'proposal',
+    assignedAdmin: 'admin_park',
+    adminMemo: '제안서 발송 완료. 피드백 대기 중.',
+    shareToken: mkShareToken(),
+  };
+  const consultations = [c1, c2, c3, c4];
+
+  const logs: Record<string, ConsultationLog[]> = {
+    cs_seed_001: [
+      {
+        id: 'cl_seed_001_a',
+        consultationId: 'cs_seed_001',
+        actorName: 'System',
+        eventType: 'created',
+        createdAt: c1.createdAt,
+      },
+    ],
+    cs_seed_002: [
+      {
+        id: 'cl_seed_002_a',
+        consultationId: 'cs_seed_002',
+        actorName: 'System',
+        eventType: 'created',
+        createdAt: c2.createdAt,
+      },
+      {
+        id: 'cl_seed_002_b',
+        consultationId: 'cs_seed_002',
+        actorName: 'Admin',
+        eventType: 'status_changed',
+        payload: { status: 'contacted' },
+        createdAt: c2.updatedAt,
+      },
+    ],
+    cs_seed_003: [
+      {
+        id: 'cl_seed_003_a',
+        consultationId: 'cs_seed_003',
+        actorName: 'System',
+        eventType: 'created',
+        createdAt: c3.createdAt,
+      },
+      {
+        id: 'cl_seed_003_b',
+        consultationId: 'cs_seed_003',
+        actorName: 'Admin',
+        eventType: 'assigned',
+        payload: { adminId: 'admin_lee' },
+        createdAt: c3.createdAt,
+      },
+      {
+        id: 'cl_seed_003_c',
+        consultationId: 'cs_seed_003',
+        actorName: 'Admin',
+        eventType: 'status_changed',
+        payload: { status: 'consulting' },
+        createdAt: c3.updatedAt,
+      },
+    ],
+    cs_seed_004: [
+      {
+        id: 'cl_seed_004_a',
+        consultationId: 'cs_seed_004',
+        actorName: 'System',
+        eventType: 'created',
+        createdAt: c4.createdAt,
+      },
+      {
+        id: 'cl_seed_004_b',
+        consultationId: 'cs_seed_004',
+        actorName: 'Admin',
+        eventType: 'assigned',
+        payload: { adminId: 'admin_park' },
+        createdAt: c4.createdAt,
+      },
+      {
+        id: 'cl_seed_004_c',
+        consultationId: 'cs_seed_004',
+        actorName: 'Admin',
+        eventType: 'status_changed',
+        payload: { status: 'proposal' },
+        createdAt: c4.updatedAt,
+      },
+    ],
+  };
+
+  const files: Record<string, ConsultationFile[]> = {
+    cs_seed_003: [
+      {
+        id: 'cf_seed_003_a',
+        consultationId: 'cs_seed_003',
+        fileType: 'site_photo',
+        storagePath: 'local://cs_seed_003/거실_현장.jpg',
+        originalName: '거실_현장.jpg',
+        uploadedBy: 'admin_lee',
+        createdAt: isoFull(2, 12, 0),
+      },
+    ],
+  };
+
+  const links: Record<string, ReferenceLink[]> = {
+    cs_seed_004: [
+      {
+        id: 'rl_seed_004_a',
+        consultationId: 'cs_seed_004',
+        url: 'https://www.instagram.com/p/Cxxxxxx',
+        category: 'instagram',
+        label: '고객 레퍼런스 — 우드 아트월',
+        addedBy: 'admin_park',
+        createdAt: isoFull(5, 14, 0),
+      },
+      {
+        id: 'rl_seed_004_b',
+        consultationId: 'cs_seed_004',
+        url: 'https://pin.it/abcd1234',
+        category: 'pinterest',
+        label: '현관 인테리어 무드',
+        addedBy: 'admin_park',
+        createdAt: isoFull(5, 14, 5),
+      },
+    ],
+  };
+
+  return { consultations, logs, files, links };
 }

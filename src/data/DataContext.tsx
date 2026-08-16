@@ -23,7 +23,7 @@ import type {
   ConsultationStatus,
   ReferenceLink,
 } from './consultation';
-import { seedQuotes, seedPortfolio } from './seed';
+import { seedQuotes, seedPortfolio, seedConsultations } from './seed';
 import { getForge, isForgeConfigured } from './forgeClient';
 
 const LS_KEY = 'yukye_design_state_v1';
@@ -137,13 +137,14 @@ function loadLocalState(): AppState {
   } catch {
     /* ignore */
   }
+  const seedCs = seedConsultations();
   return {
     quotes: seedQuotes(),
     portfolio: seedPortfolio(),
-    consultations: [],
-    consultationLogs: {},
-    consultationFiles: {},
-    referenceLinks: {},
+    consultations: seedCs.consultations,
+    consultationLogs: seedCs.logs,
+    consultationFiles: seedCs.files,
+    referenceLinks: seedCs.links,
   };
 }
 

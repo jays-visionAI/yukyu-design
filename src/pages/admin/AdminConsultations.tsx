@@ -39,7 +39,14 @@ const ASSIGNABLE_ADMINS: { id: string; name: string }[] = [
 ];
 
 export default function AdminConsultations() {
-  const { consultations, consultationLogs, backendMode, deleteConsultation } = useData();
+  const {
+    consultations,
+    consultationLogs,
+    consultationFiles,
+    referenceLinks,
+    backendMode,
+    deleteConsultation,
+  } = useData();
   const toast = useToast();
   const navigate = useNavigate();
   const { id: routeId } = useParams();
@@ -90,6 +97,8 @@ export default function AdminConsultations() {
         '상태',
         '담당자',
         '메모',
+        '첨부파일수',
+        '추천링크수',
       ],
       ...filtered.map((c) => [
         c.id.slice(-8).toUpperCase(),
@@ -107,6 +116,8 @@ export default function AdminConsultations() {
         CONSULTATION_STATUS_LABEL[c.status],
         ASSIGNABLE_ADMINS.find((a) => a.id === c.assignedAdmin)?.name ?? '',
         c.adminMemo ?? '',
+        (consultationFiles[c.id] ?? []).length,
+        (referenceLinks[c.id] ?? []).length,
       ]),
     ];
     const escape = (c: string | number) =>

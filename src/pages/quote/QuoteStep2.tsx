@@ -5,10 +5,9 @@ import Stepper from '../../components/Stepper';
 import { loadDraft, saveDraft, draftToQuote } from '../../data/quoteDraft';
 import {
   BUDGET_OPTIONS,
-  SPACE_ROOMS,
   SPACE_TYPE_OPTIONS,
-  STYLE_OPTIONS,
 } from '../../lib/format';
+import { getSpaceCatalog, pruneToCatalog } from '../../data/spaceCatalog';
 import { useData } from '../../data/DataContext';
 import { useToast } from '../../components/Toast';
 
@@ -34,8 +33,27 @@ export default function QuoteStep2() {
     key: K,
     value: (typeof draft)[K]
   ) {
-    setDraft((d) => ({ ...d, [key]: value }));
+    setDraft((d) => {
+      // 공간유형이 바뀌면 시공 공간/스타일 풀도 함께 재계산한다.
+      // — 새 풀에 없는 기존 선택값은 자동 제거 (DB TEXT[] 호환).
+      if (key === 'spaceType') {
+        const nextType = value as string;
+        const cat = getSpaceCatalog(nextType);
+        return {
+          ...d,
+          spaceType: nextType,
+          spaceTypes: pruneToCatalog(d.spaceTypes, cat.rooms),
+          styles: pruneToCatalog(d.styles, cat.styles),
+        };
+      }
+      return { ...d, [key]: value };
+    });
   }
+
+  // 현재 공간유형의 카탈로그 — rooms/styles 그리드 풀과 힌트 라인에 사용.
+  const catalog = getSpaceCatalog(draft.spaceType);
+  const roomOptions = catalog.rooms;
+  const styleOptions = catalog.styles;
 
   function toggle(arr: string[], v: string): string[] {
     return arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v];
@@ -205,8 +223,20 @@ export default function QuoteStep2() {
                 <label className="field-label">
                   시공할 공간<span className="req">*</span>
                 </label>
+                {catalog.hint && (
+                  <div
+                    style={{
+                      fontSize: 13,
+                      color: 'var(--color-text-tertiary)',
+                      marginTop: 4,
+                      marginBottom: 10,
+                    }}
+                  >
+                    {catalog.hint}
+                  </div>
+                )}
                 <div className="checkbox-grid">
-                  {SPACE_ROOMS.map((r) => {
+                  {roomOptions.map((r) => {
                     const checked = draft.spaceTypes.includes(r);
                     return (
                       <label
@@ -235,7 +265,7 @@ export default function QuoteStep2() {
                   원하시는 스타일<span className="req">*</span>
                 </label>
                 <div className="checkbox-grid">
-                  {STYLE_OPTIONS.map((s) => {
+                  {styleOptions.map((s) => {
                     const checked = draft.styles.includes(s);
                     return (
                       <label

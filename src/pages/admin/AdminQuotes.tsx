@@ -15,6 +15,7 @@ import type {
   QuoteStatus,
 } from '../../data/types';
 import Modal from '../../components/Modal';
+import { getSpaceCatalog } from '../../data/spaceCatalog';
 
 const STATUS_FILTERS: { value: QuoteStatus | 'all'; label: string }[] = [
   { value: 'all', label: '전체' },
@@ -24,6 +25,77 @@ const STATUS_FILTERS: { value: QuoteStatus | 'all'; label: string }[] = [
   { value: 'completed', label: '완료' },
   { value: 'cancelled', label: '취소' },
 ];
+
+/**
+ * 카탈로그 일치도 배지.
+ * "표준 N개 중 M개 선택" 형태로 어드민이 선택 풀의 완결성을 한눈에 확인합니다.
+ * - 선택 없음: 회색
+ * - 1개 이상 & 풀 내: 녹색
+ * - 풀 외 값이 섞여 있음: 황색 (데이터 정합성 경고)
+ */
+function CatalogMatchBadge({
+  selected,
+  pool,
+  kind,
+}: {
+  selected: string[];
+  pool: string[];
+  kind: 'rooms' | 'styles';
+}) {
+  const total = pool.length;
+  const inPool = selected.filter((v) => pool.includes(v));
+  const outOfPool = selected.filter((v) => !pool.includes(v));
+  const matched = inPool.length;
+  const label = kind === 'rooms' ? '공간' : '스타일';
+
+  if (selected.length === 0) {
+    return (
+      <span
+        style={{
+          display: 'inline-block',
+          fontSize: 11,
+          fontWeight: 600,
+          padding: '2px 8px',
+          borderRadius: 999,
+          background: 'var(--color-bg-secondary, #f5f5f5)',
+          color: 'var(--color-text-tertiary, #6b6b6b)',
+          marginLeft: 8,
+        }}
+      >
+        {label} 미선택
+      </span>
+    );
+  }
+
+  const bg = outOfPool.length > 0 ? '#fff7ed' : '#ecfdf5';
+  const fg = outOfPool.length > 0 ? '#9a3412' : '#065f46';
+  const bd = outOfPool.length > 0 ? '#fed7aa' : '#a7f3d0';
+
+  return (
+    <span
+      title={
+        outOfPool.length > 0
+          ? `표준 풀에 없는 값 ${outOfPool.length}개: ${outOfPool.join(', ')}`
+          : `${label} 카탈로그 풀 내 선택`
+      }
+      style={{
+        display: 'inline-block',
+        fontSize: 11,
+        fontWeight: 600,
+        padding: '2px 8px',
+        borderRadius: 999,
+        background: bg,
+        color: fg,
+        border: `1px solid ${bd}`,
+        marginLeft: 8,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      표준 {total}개 중 {matched}개
+      {outOfPool.length > 0 && ` · 외 ${outOfPool.length}개`}
+    </span>
+  );
+}
 
 export default function AdminQuotes() {
   const { quotes, resetData, backendMode } = useData();
@@ -297,6 +369,20 @@ export default function AdminQuotes() {
                       }}
                     >
                       {q.areaSize}평 · {SPACE_TYPE_LABEL[q.spaceType] ?? ''}
+                      {(() => {
+                        const cat = getSpaceCatalog(q.spaceType);
+                        const roomsIn = q.spaceTypes.filter((v) =>
+                          cat.rooms.includes(v)
+                        ).length;
+                        const stylesIn = q.styles.filter((v) =>
+                          cat.styles.includes(v)
+                        ).length;
+                        return (
+                          <span style={{ color: 'var(--color-text-secondary)', marginLeft: 6 }}>
+                            · 공간 {roomsIn}/{cat.rooms.length} · 스타일 {stylesIn}/{cat.styles.length}
+                          </span>
+                        );
+                      })()}
                     </div>
                   </td>
                   <td>{q.budget}</td>
@@ -461,8 +547,32 @@ function QuoteDetailPanel({
             <Info label="평수" value={`${quote.areaSize}평`} />
             <Info label="예산" value={quote.budget} />
             <Info label="입주 예정일" value={formatDate(quote.moveInDate)} />
-            <Info label="시공 공간" value={quote.spaceTypes.join(', ') || '-'} />
-            <Info label="스타일" value={quote.styles.join(', ') || '-'} />
+            <Info
+              label="시공 공간"
+              value={
+                <span style={{ display: 'inline-flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+                  <span>{quote.spaceTypes.join(', ') || '-'}</span>
+                  <CatalogMatchBadge
+                    selected={quote.spaceTypes}
+                    pool={getSpaceCatalog(quote.spaceType).rooms}
+                    kind="rooms"
+                  />
+                </span>
+              }
+            />
+            <Info
+              label="스타일"
+              value={
+                <span style={{ display: 'inline-flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+                  <span>{quote.styles.join(', ') || '-'}</span>
+                  <CatalogMatchBadge
+                    selected={quote.styles}
+                    pool={getSpaceCatalog(quote.spaceType).styles}
+                    kind="styles"
+                  />
+                </span>
+              }
+            />
             <Info
               label="계약 금액"
               value={

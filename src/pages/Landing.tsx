@@ -12,11 +12,11 @@ export default function Landing() {
     <>
       <Header />
       <main>
-        {/* Hero */}
+        {/* Hero — 모노톤 3단계 (검정 → 중간회색 → 흰색) 그라디언트 */}
         <section
           style={{
             background:
-              'linear-gradient(135deg, #0b3d91 0%, #143e7d 50%, #1a3a6e 100%)',
+              'linear-gradient(135deg, var(--ink-900) 0%, var(--ink-600) 50%, var(--ink-100) 100%)',
             color: '#fff',
             padding: 'var(--space-20) 0',
           }}
@@ -481,7 +481,7 @@ function HeroVisual() {
           position: 'absolute',
           inset: 0,
           background:
-            'linear-gradient(to bottom, rgba(11,61,145,.0) 30%, rgba(11,61,145,.85))',
+            'linear-gradient(to bottom, rgba(10,10,10,0) 30%, rgba(10,10,10,.85))',
           pointerEvents: 'none',
         }}
       />

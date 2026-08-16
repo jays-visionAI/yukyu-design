@@ -10,7 +10,7 @@ export function Header() {
         <Link to="/" className="logo" aria-label="Yukyu Design 홈">
           <span className="logo-mark">Y</span>
           <span>
-            Yukyu <span style={{ color: 'var(--color-accent)' }}>Design</span>
+            Yukyu <span className="logo-em">Design</span>
           </span>
         </Link>
         <nav className="row" style={{ gap: 'var(--space-2)' }}>
@@ -59,7 +59,7 @@ export function Footer() {
           <div className="logo">
             <span className="logo-mark">Y</span>
             <span>
-              Yukyu <span style={{ color: 'var(--color-accent)' }}>Design</span>
+              Yukyu <span className="logo-em">Design</span>
             </span>
           </div>
           <p style={{ marginTop: 12, color: 'var(--color-text-tertiary)' }}>

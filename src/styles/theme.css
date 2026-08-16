@@ -1,40 +1,63 @@
 /* ============================================================
    Yukyu Design — Design System (CSS Variables / Tokens)
+
+   컨셉: Black & White (엄격한 모노톤)
+   · 베이스는 순수 무채색 (흰색/회색/검정)만 사용
+   · 컬러는 어디에도 등장하지 않으며, 시각적 위계는
+     · 명도(0~100%)
+     · 보더 두께(1px / 2px)
+     · 그림자 농도 + spread
+     · 온셋 (floating 강조) 으로만 형성
+   · 강조 표식이 필요한 곳엔 inverted (검정 배경 + 흰 글씨) 만 사용
    ============================================================ */
 :root {
-  /* Brand */
-  --color-primary: #0b3d91;
-  --color-primary-hover: #082b6b;
-  --color-primary-light: #e8eef8;
-  --color-accent: #c9a961;
-  --color-accent-hover: #b08f4a;
+  /* Mono ink scale — 검정~중간 회색 */
+  --ink-0: #ffffff;
+  --ink-50: #fafafa;
+  --ink-100: #f3f3f4;
+  --ink-200: #e6e6e8;
+  --ink-300: #d2d2d6;
+  --ink-400: #a8a8ae;
+  --ink-500: #76767d;
+  --ink-600: #4a4a4f;
+  --ink-700: #2a2a2e;
+  --ink-800: #161618;
+  --ink-900: #0a0a0a;
+  --ink-1000: #000000;
 
-  /* Neutral */
-  --color-bg-page: #f5f6f8;
-  --color-bg-card: #ffffff;
-  --color-bg-muted: #f0f1f4;
-  --color-border: #e2e5eb;
-  --color-border-strong: #c9ced8;
-  --color-text-primary: #1a1d24;
-  --color-text-secondary: #5c6470;
-  --color-text-tertiary: #8a92a0;
-  --color-text-disabled: #b5bac3;
+  /* Brand — 검정 1차 */
+  --color-primary: var(--ink-900);
+  --color-primary-hover: var(--ink-700);
+  --color-primary-light: var(--ink-100);
+  --color-accent: var(--ink-900);
+  --color-accent-hover: var(--ink-700);
 
-  /* Semantic */
-  --color-success: #1f8a55;
-  --color-warning: #e08a1f;
-  --color-danger: #c93535;
-  --color-info: #1f6faa;
+  /* Neutral — 깔끔한 모노톤 */
+  --color-bg-page: var(--ink-0);
+  --color-bg-card: var(--ink-0);
+  --color-bg-muted: var(--ink-100);
+  --color-border: var(--ink-200);
+  --color-border-strong: var(--ink-300);
+  --color-text-primary: var(--ink-900);
+  --color-text-secondary: var(--ink-600);
+  --color-text-tertiary: var(--ink-500);
+  --color-text-disabled: var(--ink-400);
 
-  /* Status badges */
-  --color-today-bg: #e8eef8;
-  --color-today-fg: #0b3d91;
-  --color-waiting-bg: #fff4d9;
-  --color-waiting-fg: #8a5a00;
-  --color-done-bg: #d9f0e2;
-  --color-done-fg: #1f8a55;
-  --color-hot-bg: #ffe2e2;
-  --color-hot-fg: #c93535;
+  /* Semantic — 무채색만 (단순 표식 = 명도 차이만으로 구분) */
+  --color-success: var(--ink-700);
+  --color-warning: var(--ink-700);
+  --color-danger: var(--ink-900);
+  --color-info: var(--ink-700);
+
+  /* Status badges — 무채색 표식 */
+  --color-today-bg: var(--ink-900);
+  --color-today-fg: var(--ink-0);
+  --color-waiting-bg: var(--ink-100);
+  --color-waiting-fg: var(--ink-700);
+  --color-done-bg: var(--ink-0);
+  --color-done-fg: var(--ink-900);
+  --color-hot-bg: var(--ink-900);
+  --color-hot-fg: var(--ink-0);
 
   /* Typography */
   --font-family-base: 'Pretendard Variable', Pretendard, -apple-system,
@@ -240,30 +263,33 @@ p {
 }
 
 .btn-primary {
-  background: var(--color-primary);
-  color: #fff;
+  background: var(--ink-900);
+  color: var(--ink-0);
+  border-color: var(--ink-900);
 }
 .btn-primary:hover:not(:disabled) {
-  background: var(--color-primary-hover);
+  background: var(--ink-0);
+  color: var(--ink-900);
 }
 
 .btn-accent {
-  background: var(--color-accent);
-  color: #1a1d24;
+  background: var(--ink-900);
+  color: var(--ink-0);
+  border-color: var(--ink-900);
 }
 .btn-accent:hover:not(:disabled) {
-  background: var(--color-accent-hover);
-  color: #fff;
+  background: var(--ink-0);
+  color: var(--ink-900);
 }
 
 .btn-outline {
-  background: #fff;
-  color: var(--color-text-primary);
-  border-color: var(--color-border-strong);
+  background: var(--ink-0);
+  color: var(--ink-900);
+  border-color: var(--ink-900);
 }
 .btn-outline:hover:not(:disabled) {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
+  background: var(--ink-900);
+  color: var(--ink-0);
 }
 
 .btn-ghost {
@@ -460,21 +486,63 @@ p {
   line-height: 1;
 }
 
+/* ============================================================
+   Badges — 모노 톤 4가지
+   · badge-solid   검정 배경 + 흰 글씨 (강조)
+   · badge-tinted  옅은 회색 배경 + 검정 글씨 (중립)
+   · badge-outline 투명 배경 + 검정 보더 (보조)
+   · badge-inverse 흰 배경 + 검정 보더 (선택된 항목)
+   · badge-today   검정 배경 + 흰 글씨 (현재 활성)
+   · badge-waiting 옅은 회색 + 검정 (대기)
+   · badge-done    흰 배경 + 검정 (완료 — 안정)
+   · badge-hot     검정 배경 + 흰 글씨 (긴급)
+   · 호환을 위해 mint/peach/lilac/butter 별칭도 무채색으로 매핑
+   ============================================================ */
 .badge-today {
-  background: var(--color-today-bg);
-  color: var(--color-today-fg);
+  background: var(--ink-900);
+  color: var(--ink-0);
 }
 .badge-waiting {
-  background: var(--color-waiting-bg);
-  color: var(--color-waiting-fg);
+  background: var(--ink-100);
+  color: var(--ink-700);
 }
 .badge-done {
-  background: var(--color-done-bg);
-  color: var(--color-done-fg);
+  background: var(--ink-0);
+  color: var(--ink-900);
+  border: 1px solid var(--ink-300);
 }
 .badge-hot {
-  background: var(--color-hot-bg);
-  color: var(--color-hot-fg);
+  background: var(--ink-900);
+  color: var(--ink-0);
+}
+
+/* Mono 4-tone primitives */
+.badge-solid {
+  background: var(--ink-900);
+  color: var(--ink-0);
+}
+.badge-tinted {
+  background: var(--ink-100);
+  color: var(--ink-900);
+}
+.badge-outline {
+  background: transparent;
+  color: var(--ink-900);
+  border: 1px solid var(--ink-900);
+}
+.badge-inverse {
+  background: var(--ink-0);
+  color: var(--ink-900);
+  border: 1px solid var(--ink-900);
+}
+
+/* Pastel 별칭 (기존 import 호환) — 모두 무채색으로 매핑 */
+.badge-mint,
+.badge-peach,
+.badge-lilac,
+.badge-butter {
+  background: var(--ink-100);
+  color: var(--ink-900);
 }
 
 /* ============================================================
@@ -563,12 +631,20 @@ p {
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  background: var(--color-primary);
+  background: var(--ink-900);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-accent);
+  color: var(--ink-0);
   font-weight: 900;
+  border: 1px solid var(--ink-900);
+}
+
+.logo-em {
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  border-bottom: 2px solid var(--ink-900);
+  padding-bottom: 1px;
 }
 
 .app-footer {

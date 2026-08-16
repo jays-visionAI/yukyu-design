@@ -5,13 +5,15 @@ import { usePartner } from '../../data/PartnerContext';
 import { useToast } from '../../components/Toast';
 
 export default function AdminLayout() {
-  const { adminLogout, quotes, backendMode } = useData();
+  const { adminLogout, quotes, consultations, backendMode } = useData();
   const { events } = useAnalytics();
   const { applications } = usePartner();
   const navigate = useNavigate();
   const toast = useToast();
 
   const newCount = quotes.filter((q) => q.status === 'received').length;
+  // 신규 상담 건수 (received 상태) — 사이드바 배지
+  const consultNewCount = consultations.filter((c) => c.status === 'received').length;
   // 미처리 파트너 신청 (submitted + reviewing)
   const partnerNewCount = applications.filter(
     (a) => a.status === 'submitted' || a.status === 'reviewing'
@@ -87,6 +89,9 @@ export default function AdminLayout() {
           </SidebarLink>
           <SidebarLink to="/admin/quotes" badge={newCount}>
             접수 관리
+          </SidebarLink>
+          <SidebarLink to="/admin/consultations" badge={consultNewCount}>
+            상담 관리
           </SidebarLink>
           <SidebarLink to="/admin/portfolio">포트폴리오</SidebarLink>
           <SidebarLink to="/admin/reviews">고객 평가</SidebarLink>

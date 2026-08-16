@@ -16,6 +16,13 @@ import type {
   SpaceType,
 } from './types';
 import type { PortfolioItem } from './portfolio';
+import type {
+  Consultation,
+  ConsultationFile,
+  ConsultationLog,
+  ConsultationStatus,
+  ReferenceLink,
+} from './consultation';
 import { seedQuotes, seedPortfolio } from './seed';
 import { getForge, isForgeConfigured } from './forgeClient';
 
@@ -24,6 +31,10 @@ const LS_KEY = 'yukye_design_state_v1';
 export interface AppState {
   quotes: Quote[];
   portfolio: PortfolioItem[];
+  consultations: Consultation[];
+  consultationLogs: Record<string, ConsultationLog[]>; // consultationId → logs
+  consultationFiles: Record<string, ConsultationFile[]>; // consultationId → 첨부파일
+  referenceLinks: Record<string, ReferenceLink[]>; // consultationId → 추천 링크
 }
 
 interface DataContextValue extends AppState {
@@ -57,6 +68,29 @@ interface DataContextValue extends AppState {
    */
   fetchQuoteByShareToken: (token: string) => Promise<Quote | null>;
   resetData: () => void;
+
+  // Consultations
+  createConsultation: (
+    c: Omit<Consultation, 'id' | 'createdAt' | 'updatedAt' | 'status' | 'shareToken'>
+  ) => Consultation;
+  updateConsultation: (id: string, patch: Partial<Consultation>) => void;
+  deleteConsultation: (id: string) => void;
+  setConsultationStatus: (id: string, status: ConsultationStatus, actorName?: string) => void;
+  assignConsultation: (id: string, adminId: string | null, actorName?: string) => void;
+  /** share_token 으로 단건 조회 (anon 추적 페이지용) */
+  fetchConsultationByShareToken: (token: string) => Promise<Consultation | null>;
+
+  // Consultation 첨부파일 / 추천 링크 (어드민이 추가/삭제)
+  addConsultationFile: (
+    consultationId: string,
+    file: Omit<ConsultationFile, 'id' | 'consultationId' | 'createdAt'>
+  ) => void;
+  removeConsultationFile: (consultationId: string, fileId: string) => void;
+  addReferenceLink: (
+    consultationId: string,
+    link: Omit<ReferenceLink, 'id' | 'consultationId' | 'createdAt'>
+  ) => void;
+  removeReferenceLink: (consultationId: string, linkId: string) => void;
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
@@ -74,14 +108,43 @@ function loadLocalState(): AppState {
     const raw = localStorage.getItem(LS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as AppState;
+      if (
+        parsed &&
+        Array.isArray(parsed.quotes) &&
+        Array.isArray(parsed.portfolio) &&
+        Array.isArray(parsed.consultations)
+      ) {
+        return {
+          quotes: parsed.quotes,
+          portfolio: parsed.portfolio,
+          consultations: parsed.consultations,
+          consultationLogs: parsed.consultationLogs ?? {},
+          consultationFiles: parsed.consultationFiles ?? {},
+          referenceLinks: parsed.referenceLinks ?? {},
+        };
+      }
+      // 1차 마이그레이션: 기존 데이터에 consultations 필드가 없는 경우 빈 배열로 보강
       if (parsed && Array.isArray(parsed.quotes) && Array.isArray(parsed.portfolio)) {
-        return parsed;
+        return {
+          ...parsed,
+          consultations: [],
+          consultationLogs: {},
+          consultationFiles: {},
+          referenceLinks: {},
+        };
       }
     }
   } catch {
     /* ignore */
   }
-  return { quotes: seedQuotes(), portfolio: seedPortfolio() };
+  return {
+    quotes: seedQuotes(),
+    portfolio: seedPortfolio(),
+    consultations: [],
+    consultationLogs: {},
+    consultationFiles: {},
+    referenceLinks: {},
+  };
 }
 
 function saveLocalState(state: AppState) {
@@ -175,6 +238,58 @@ interface PortfolioRow {
   published: boolean;
 }
 
+interface ConsultationRow {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  name: string;
+  phone: string;
+  email: string | null;
+  apartment: string;
+  contact_prefs: Consultation['contactPrefs'];
+  move_in: Consultation['moveIn'] | null;
+  budget: Consultation['budget'] | null;
+  remodel_scope: Consultation['remodelScope'] | null;
+  remodel_areas: string[];
+  supply_area: number | null;
+  status: ConsultationStatus;
+  assigned_admin: string | null;
+  admin_memo: string | null;
+  share_token: string;
+}
+
+interface ConsultationLogRow {
+  id: string;
+  consultation_id: string;
+  actor_id: string | null;
+  actor_name: string | null;
+  event_type: ConsultationLog['eventType'];
+  payload: Record<string, unknown> | null;
+  created_at: string;
+}
+
+function rowToConsultation(row: ConsultationRow): Consultation {
+  return {
+    id: row.id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    name: row.name,
+    phone: row.phone,
+    email: row.email ?? undefined,
+    apartment: row.apartment,
+    contactPrefs: row.contact_prefs ?? [],
+    moveIn: row.move_in ?? undefined,
+    budget: row.budget ?? undefined,
+    remodelScope: row.remodel_scope ?? undefined,
+    remodelAreas: row.remodel_areas ?? [],
+    supplyArea: row.supply_area ?? undefined,
+    status: row.status,
+    assignedAdmin: row.assigned_admin ?? undefined,
+    adminMemo: row.admin_memo ?? undefined,
+    shareToken: row.share_token,
+  };
+}
+
 function rowToQuote(row: QuoteRow, updates: ProgressUpdate[]): Quote {
   return {
     id: row.id,
@@ -242,7 +357,16 @@ function quoteToRowPatch(patch: Partial<Quote>): Record<string, unknown> {
 export function DataProvider({ children }: { children: ReactNode }) {
   const backendMode: 'forgedb' | 'local' = isForgeConfigured ? 'forgedb' : 'local';
   const [state, setState] = useState<AppState>(() =>
-    backendMode === 'local' ? loadLocalState() : { quotes: [], portfolio: [] }
+    backendMode === 'local'
+      ? loadLocalState()
+      : {
+          quotes: [],
+          portfolio: [],
+          consultations: [],
+          consultationLogs: {},
+          consultationFiles: {},
+          referenceLinks: {},
+        }
   );
   const [isAdmin, setIsAdmin] = useState<boolean>(() => {
     if (backendMode === 'forgedb') return false; // ForgeDB 세션은 비동기 hydrate
@@ -271,13 +395,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
         // 2) quotes 는 RLS 가 관리자/공유토큰별 필터링을 처리합니다.
         //    - 관리자 로그인 상태: 전체 quote hydrate (관리자 콘솔)
         //    - 비로그인 anon: 빈 목록 — 고객은 /quote/track/:token 으로만 들어옴
-        const [quotesRes, progressRes, portfolioRes] = await Promise.all([
-          isAuthed
-            ? fb.from('quotes').select('*').order('created_at', { ascending: false })
-            : Promise.resolve({ data: [], error: null as null }),
-          fb.from('progress_updates').select('*').order('at', { ascending: false }),
-          fb.from('portfolio').select('*').order('created_at', { ascending: false }),
-        ]);
+        // 3) consultations 는 관리자에게만 전체 목록을 가져옵니다 (anon 추적 페이지는
+        //    fetchConsultationByShareToken 으로 개별 토큰 조회).
+        const [quotesRes, progressRes, portfolioRes, consultationsRes, consultLogsRes] =
+          await Promise.all([
+            isAuthed
+              ? fb.from('quotes').select('*').order('created_at', { ascending: false })
+              : Promise.resolve({ data: [], error: null as null }),
+            fb.from('progress_updates').select('*').order('at', { ascending: false }),
+            fb.from('portfolio').select('*').order('created_at', { ascending: false }),
+            isAuthed
+              ? fb.from('consultations').select('*').order('created_at', { ascending: false })
+              : Promise.resolve({ data: [], error: null as null }),
+            isAuthed
+              ? fb.from('consultation_logs').select('*').order('created_at', { ascending: false })
+              : Promise.resolve({ data: [], error: null as null }),
+          ]);
         if (cancelled) return;
         if (quotesRes.error || progressRes.error || portfolioRes.error) {
           console.error(
@@ -308,7 +441,36 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const portfolio: PortfolioItem[] = ((portfolioRes.data ?? []) as PortfolioRow[]).map(
           rowToPortfolio
         );
-        setState({ quotes, portfolio });
+
+        // consultations 매핑
+        const consultations: Consultation[] = (
+          (consultationsRes.data ?? []) as ConsultationRow[]
+        ).map(rowToConsultation);
+
+        // consultation_logs 매핑 (consultationId → logs[])
+        const logsByConsult: Record<string, ConsultationLog[]> = {};
+        for (const l of (consultLogsRes.data ?? []) as ConsultationLogRow[]) {
+          const list = logsByConsult[l.consultation_id] ?? [];
+          list.push({
+            id: l.id,
+            consultationId: l.consultation_id,
+            actorId: l.actor_id ?? undefined,
+            actorName: l.actor_name ?? undefined,
+            eventType: l.event_type,
+            payload: l.payload ?? undefined,
+            createdAt: l.created_at,
+          });
+          logsByConsult[l.consultation_id] = list;
+        }
+
+        setState({
+          quotes,
+          portfolio,
+          consultations,
+          consultationLogs: logsByConsult,
+          consultationFiles: {},
+          referenceLinks: {},
+        });
       } catch (err) {
         console.error('[ForgeDB] hydrate 예외:', err);
       }
@@ -401,6 +563,33 @@ export function DataProvider({ children }: { children: ReactNode }) {
       }
     };
 
+    const refreshConsultations = async () => {
+      try {
+        const [{ data: cRows }, { data: lRows }] = await Promise.all([
+          fb.from('consultations').select('*').order('created_at', { ascending: false }),
+          fb.from('consultation_logs').select('*').order('created_at', { ascending: false }),
+        ]);
+        const consultations = ((cRows ?? []) as ConsultationRow[]).map(rowToConsultation);
+        const logsByConsult: Record<string, ConsultationLog[]> = {};
+        for (const l of (lRows ?? []) as ConsultationLogRow[]) {
+          const list = logsByConsult[l.consultation_id] ?? [];
+          list.push({
+            id: l.id,
+            consultationId: l.consultation_id,
+            actorId: l.actor_id ?? undefined,
+            actorName: l.actor_name ?? undefined,
+            eventType: l.event_type,
+            payload: l.payload ?? undefined,
+            createdAt: l.created_at,
+          });
+          logsByConsult[l.consultation_id] = list;
+        }
+        setState((s) => ({ ...s, consultations, consultationLogs: logsByConsult }));
+      } catch (err) {
+        console.error('[ForgeDB] refreshConsultations 실패:', err);
+      }
+    };
+
     let channel: { unsubscribe: () => void | Promise<void> } | null = null;
     try {
       const ch = fb.channel('yukye-state');
@@ -425,6 +614,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
           { event: '*', schema: 'public', table: 'portfolio' },
           () => {
             void refreshPortfolio();
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'consultations' },
+          () => {
+            void refreshConsultations();
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'consultation_logs' },
+          () => {
+            void refreshConsultations();
           }
         )
         .subscribe((status: string) => {
@@ -900,14 +1103,430 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const resetData = useCallback(() => {
     if (backendMode === 'local') {
       localStorage.removeItem(LS_KEY);
-      setState({ quotes: seedQuotes(), portfolio: seedPortfolio() });
+      setState({
+        quotes: seedQuotes(),
+        portfolio: seedPortfolio(),
+        consultations: [],
+        consultationLogs: {},
+        consultationFiles: {},
+        referenceLinks: {},
+      });
     }
     // ForgeDB 모드에서는 별도 reset RPC 가 필요 — 데모에서는 no-op
   }, [backendMode]);
 
+  // ============================================================
+  //  Consultations
+  // ============================================================
+
+  const createConsultation: DataContextValue['createConsultation'] = useCallback(
+    (c) => {
+      const now = new Date().toISOString();
+      const shareToken =
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID()
+          : `tk_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+      const local: Consultation = {
+        ...c,
+        id: genId('cs'),
+        createdAt: now,
+        updatedAt: now,
+        status: 'received',
+        shareToken,
+      };
+      setState((s) => ({
+        ...s,
+        consultations: [local, ...s.consultations],
+        consultationLogs: {
+          ...s.consultationLogs,
+          [local.id]: [
+            {
+              id: genId('cl'),
+              consultationId: local.id,
+              actorName: 'System',
+              eventType: 'created',
+              payload: { source: 'web_form' },
+              createdAt: now,
+            },
+          ],
+        },
+        consultationFiles: { ...s.consultationFiles, [local.id]: s.consultationFiles[local.id] ?? [] },
+        referenceLinks: { ...s.referenceLinks, [local.id]: s.referenceLinks[local.id] ?? [] },
+      }));
+
+      if (backendMode === 'forgedb') {
+        (async () => {
+          try {
+            const fb = getForge();
+            const { data, error } = await fb
+              .from('consultations')
+              .insert({
+                name: local.name,
+                phone: local.phone,
+                email: local.email ?? null,
+                apartment: local.apartment,
+                contact_prefs: local.contactPrefs,
+                move_in: local.moveIn ?? null,
+                budget: local.budget ?? null,
+                remodel_scope: local.remodelScope ?? null,
+                remodel_areas: local.remodelAreas,
+                supply_area: local.supplyArea ?? null,
+                status: local.status,
+                share_token: shareToken,
+              })
+              .select('id, share_token')
+              .single();
+            if (error || !data) {
+              console.error('[ForgeDB] createConsultations insert 실패:', error);
+              return;
+            }
+            const serverId = (data as { id: string }).id;
+            const serverToken = (data as { share_token?: string }).share_token ?? shareToken;
+            setState((s) => ({
+              ...s,
+              consultations: s.consultations.map((x) =>
+                x.id === local.id
+                  ? { ...x, id: serverId, shareToken: serverToken }
+                  : x
+              ),
+              consultationLogs: {
+                ...s.consultationLogs,
+                [serverId]: s.consultationLogs[local.id] ?? [],
+              },
+            }));
+            await fb.from('consultation_logs').insert({
+              consultation_id: serverId,
+              actor_name: 'System',
+              event_type: 'created',
+              payload: { source: 'web_form' },
+            });
+          } catch (err) {
+            console.error('[ForgeDB] createConsultation 실패 (로컬 저장됨):', err);
+          }
+        })();
+      }
+      return local;
+    },
+    [backendMode]
+  );
+
+  const updateConsultation: DataContextValue['updateConsultation'] = useCallback(
+    (id, patch) => {
+      setState((s) => ({
+        ...s,
+        consultations: s.consultations.map((x) =>
+          x.id === id ? { ...x, ...patch, updatedAt: new Date().toISOString() } : x
+        ),
+      }));
+      if (backendMode === 'forgedb') {
+        const row: Record<string, unknown> = {};
+        if (patch.name !== undefined) row.name = patch.name;
+        if (patch.phone !== undefined) row.phone = patch.phone;
+        if (patch.email !== undefined) row.email = patch.email ?? null;
+        if (patch.apartment !== undefined) row.apartment = patch.apartment;
+        if (patch.contactPrefs !== undefined) row.contact_prefs = patch.contactPrefs;
+        if (patch.moveIn !== undefined) row.move_in = patch.moveIn ?? null;
+        if (patch.budget !== undefined) row.budget = patch.budget ?? null;
+        if (patch.remodelScope !== undefined) row.remodel_scope = patch.remodelScope ?? null;
+        if (patch.remodelAreas !== undefined) row.remodel_areas = patch.remodelAreas;
+        if (patch.supplyArea !== undefined) row.supply_area = patch.supplyArea ?? null;
+        if (patch.adminMemo !== undefined) row.admin_memo = patch.adminMemo ?? null;
+        if (patch.assignedAdmin !== undefined) row.assigned_admin = patch.assignedAdmin ?? null;
+        if (Object.keys(row).length === 0) return;
+        getForge()
+          .from('consultations')
+          .update(row)
+          .eq('id', id)
+          .then(({ error }) => {
+            if (error) console.error('[ForgeDB] updateConsultation 실패:', error);
+          });
+      }
+    },
+    [backendMode]
+  );
+
+  const deleteConsultation: DataContextValue['deleteConsultation'] = useCallback(
+    (id) => {
+      setState((s) => {
+        const { [id]: _drop, ...rest } = s.consultationLogs;
+        void _drop;
+        return {
+          ...s,
+          consultations: s.consultations.filter((x) => x.id !== id),
+          consultationLogs: rest,
+        };
+      });
+      if (backendMode === 'forgedb') {
+        getForge()
+          .from('consultations')
+          .delete()
+          .eq('id', id)
+          .then(({ error }) => {
+            if (error) console.error('[ForgeDB] deleteConsultation 실패:', error);
+          });
+      }
+    },
+    [backendMode]
+  );
+
+  const setConsultationStatus: DataContextValue['setConsultationStatus'] = useCallback(
+    (id, status, actorName) => {
+      const now = new Date().toISOString();
+      setState((s) => ({
+        ...s,
+        consultations: s.consultations.map((x) =>
+          x.id === id ? { ...x, status, updatedAt: now } : x
+        ),
+        consultationLogs: {
+          ...s.consultationLogs,
+          [id]: [
+            ...(s.consultationLogs[id] ?? []),
+            {
+              id: genId('cl'),
+              consultationId: id,
+              actorName: actorName ?? 'Admin',
+              eventType: 'status_changed',
+              payload: { status },
+              createdAt: now,
+            },
+          ],
+        },
+      }));
+      if (backendMode === 'forgedb') {
+        getForge()
+          .from('consultations')
+          .update({ status })
+          .eq('id', id)
+          .then(({ error }) => {
+            if (error) console.error('[ForgeDB] setConsultationStatus 실패:', error);
+          });
+        getForge()
+          .from('consultation_logs')
+          .insert({ consultation_id: id, actor_name: actorName ?? 'Admin', event_type: 'status_changed', payload: { status } })
+          .then(({ error }) => {
+            if (error) console.error('[ForgeDB] setConsultationStatus log 실패:', error);
+          });
+      }
+    },
+    [backendMode]
+  );
+
+  const assignConsultation: DataContextValue['assignConsultation'] = useCallback(
+    (id, adminId, actorName) => {
+      const now = new Date().toISOString();
+      setState((s) => ({
+        ...s,
+        consultations: s.consultations.map((x) =>
+          x.id === id ? { ...x, assignedAdmin: adminId ?? undefined, updatedAt: now } : x
+        ),
+        consultationLogs: {
+          ...s.consultationLogs,
+          [id]: [
+            ...(s.consultationLogs[id] ?? []),
+            {
+              id: genId('cl'),
+              consultationId: id,
+              actorName: actorName ?? 'Admin',
+              eventType: 'assigned',
+              payload: { adminId: adminId ?? null },
+              createdAt: now,
+            },
+          ],
+        },
+      }));
+      if (backendMode === 'forgedb') {
+        getForge()
+          .from('consultations')
+          .update({ assigned_admin: adminId })
+          .eq('id', id)
+          .then(({ error }) => {
+            if (error) console.error('[ForgeDB] assignConsultation 실패:', error);
+          });
+      }
+    },
+    [backendMode]
+  );
+
+  const fetchConsultationByShareToken: DataContextValue['fetchConsultationByShareToken'] =
+    useCallback(
+      async (token) => {
+        const trimmed = token?.trim();
+        if (!trimmed) return null;
+        const localHit = state.consultations.find((c) => c.shareToken === trimmed);
+        if (localHit) return localHit;
+        if (backendMode === 'forgedb') {
+          try {
+            const fb = getForge();
+            const { data, error } = await fb
+              .from('consultations')
+              .select('*')
+              .eq('share_token', trimmed)
+              .maybeSingle();
+            if (error || !data) return null;
+            return rowToConsultation(data as ConsultationRow);
+          } catch (err) {
+            console.error('[ForgeDB] fetchConsultationByShareToken 실패:', err);
+            return null;
+          }
+        }
+        return null;
+      },
+      [backendMode, state.consultations]
+    );
+
+  // ============================================================
+  //  Consultation 첨부파일 / 추천 링크 (로컬 + ForgeDB 양쪽 동기화)
+  // ============================================================
+
+  const addConsultationFile: DataContextValue['addConsultationFile'] = useCallback(
+    (consultationId, file) => {
+      const now = new Date().toISOString();
+      const id = genId('cf');
+      const entry: ConsultationFile = { ...file, id, consultationId, createdAt: now };
+      setState((s) => ({
+        ...s,
+        consultationFiles: {
+          ...s.consultationFiles,
+          [consultationId]: [...(s.consultationFiles[consultationId] ?? []), entry],
+        },
+        consultations: s.consultations.map((c) =>
+          c.id === consultationId ? { ...c, updatedAt: now } : c
+        ),
+      }));
+      if (backendMode === 'forgedb') {
+        (async () => {
+          try {
+            const fb = getForge();
+            const { error } = await fb.from('consultation_files').insert({
+              consultation_id: consultationId,
+              file_type: entry.fileType,
+              storage_path: entry.storagePath,
+              original_name: entry.originalName,
+              mime_type: entry.mimeType ?? null,
+              size_bytes: entry.sizeBytes ?? null,
+              uploaded_by: entry.uploadedBy ?? null,
+            });
+            if (error) console.error('[ForgeDB] consultation_files insert 실패:', error);
+          } catch (err) {
+            console.error('[ForgeDB] consultation_files insert 실패:', err);
+          }
+        })();
+      }
+    },
+    [backendMode]
+  );
+
+  const removeConsultationFile: DataContextValue['removeConsultationFile'] = useCallback(
+    (consultationId, fileId) => {
+      const now = new Date().toISOString();
+      setState((s) => ({
+        ...s,
+        consultationFiles: {
+          ...s.consultationFiles,
+          [consultationId]: (s.consultationFiles[consultationId] ?? []).filter(
+            (f) => f.id !== fileId
+          ),
+        },
+        consultations: s.consultations.map((c) =>
+          c.id === consultationId ? { ...c, updatedAt: now } : c
+        ),
+      }));
+      if (backendMode === 'forgedb') {
+        (async () => {
+          try {
+            const fb = getForge();
+            const { error } = await fb
+              .from('consultation_files')
+              .delete()
+              .eq('id', fileId);
+            if (error) console.error('[ForgeDB] consultation_files delete 실패:', error);
+          } catch (err) {
+            console.error('[ForgeDB] consultation_files delete 실패:', err);
+          }
+        })();
+      }
+    },
+    [backendMode]
+  );
+
+  const addReferenceLink: DataContextValue['addReferenceLink'] = useCallback(
+    (consultationId, link) => {
+      const now = new Date().toISOString();
+      const id = genId('rl');
+      const entry: ReferenceLink = { ...link, id, consultationId, createdAt: now };
+      setState((s) => ({
+        ...s,
+        referenceLinks: {
+          ...s.referenceLinks,
+          [consultationId]: [...(s.referenceLinks[consultationId] ?? []), entry],
+        },
+        consultations: s.consultations.map((c) =>
+          c.id === consultationId ? { ...c, updatedAt: now } : c
+        ),
+      }));
+      if (backendMode === 'forgedb') {
+        (async () => {
+          try {
+            const fb = getForge();
+            const { error } = await fb.from('reference_links').insert({
+              consultation_id: consultationId,
+              url: entry.url,
+              category: entry.category,
+              label: entry.label ?? null,
+              added_by: entry.addedBy ?? null,
+            });
+            if (error) console.error('[ForgeDB] reference_links insert 실패:', error);
+          } catch (err) {
+            console.error('[ForgeDB] reference_links insert 실패:', err);
+          }
+        })();
+      }
+    },
+    [backendMode]
+  );
+
+  const removeReferenceLink: DataContextValue['removeReferenceLink'] = useCallback(
+    (consultationId, linkId) => {
+      const now = new Date().toISOString();
+      setState((s) => ({
+        ...s,
+        referenceLinks: {
+          ...s.referenceLinks,
+          [consultationId]: (s.referenceLinks[consultationId] ?? []).filter(
+            (l) => l.id !== linkId
+          ),
+        },
+        consultations: s.consultations.map((c) =>
+          c.id === consultationId ? { ...c, updatedAt: now } : c
+        ),
+      }));
+      if (backendMode === 'forgedb') {
+        (async () => {
+          try {
+            const fb = getForge();
+            const { error } = await fb
+              .from('reference_links')
+              .delete()
+              .eq('id', linkId);
+            if (error) console.error('[ForgeDB] reference_links delete 실패:', error);
+          } catch (err) {
+            console.error('[ForgeDB] reference_links delete 실패:', err);
+          }
+        })();
+      }
+    },
+    [backendMode]
+  );
+
+  // ---------- value ----------
   const value = useMemo<DataContextValue>(
     () => ({
-      ...state,
+      quotes: state.quotes,
+      portfolio: state.portfolio,
+      consultations: state.consultations,
+      consultationLogs: state.consultationLogs,
+      consultationFiles: state.consultationFiles,
+      referenceLinks: state.referenceLinks,
       createQuote,
       updateQuote,
       deleteQuote,
@@ -923,6 +1542,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
       fetchQuoteByShareToken,
       resetData,
       backendMode,
+      createConsultation,
+      updateConsultation,
+      deleteConsultation,
+      setConsultationStatus,
+      assignConsultation,
+      fetchConsultationByShareToken,
+      addConsultationFile,
+      removeConsultationFile,
+      addReferenceLink,
+      removeReferenceLink,
     }),
     [
       state,
@@ -941,6 +1570,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
       fetchQuoteByShareToken,
       resetData,
       backendMode,
+      createConsultation,
+      updateConsultation,
+      deleteConsultation,
+      setConsultationStatus,
+      assignConsultation,
+      fetchConsultationByShareToken,
+      addConsultationFile,
+      removeConsultationFile,
+      addReferenceLink,
+      removeReferenceLink,
     ]
   );
 

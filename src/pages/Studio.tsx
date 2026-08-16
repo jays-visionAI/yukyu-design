@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Header, Footer } from '../components/Layout';
 import StudioRenderer from '../components/StudioRenderer';
+import SpatialRenderer from '../components/SpatialRenderer';
 import { getForge, isForgeConfigured } from '../data/forgeClient';
 import { STUDIO_APARTMENTS, type StudioApartment } from '../data/studio';
 
@@ -144,6 +145,101 @@ export default function Studio() {
             </div>
           </section>
         </div>
+
+        {/* ============================================================
+           제안서 — 공간들 (닥꽁노트 제안서 스타일)
+           · 선택한 평면의 각 방(거실/주방/침실/욕실/다용도실) 을
+             카드 그리드로 나열하고, 각 공간의 평면 + 가구 시안을
+             컨셉에 맞춰 미리 보여줍니다.
+           ============================================================ */}
+        <section className="studio-rooms" aria-label="공간별 시안">
+          <header className="studio-rooms__header">
+            <div>
+              <p className="studio-eyebrow">PROPOSAL — ROOMS</p>
+              <h2>공간들</h2>
+              <p className="studio-rooms__lead">
+                {selectedApartment.name} · {selectedUnit.name} 평면을 {selectedConcept.name} 컨셉으로 재구성한 결과입니다.
+                각 공간을 클릭하면 해당 영역으로 강조됩니다.
+              </p>
+            </div>
+            <div className="studio-rooms__meta">
+              <span><strong>{selectedUnit.plan.rooms.length}</strong>개 공간</span>
+              <span><strong>{selectedUnit.area}</strong>㎡</span>
+              <span><strong>{selectedUnit.bedrooms}</strong>Bed · <strong>{selectedUnit.bathrooms}</strong>Bath</span>
+            </div>
+          </header>
+
+          <div className="studio-rooms__grid">
+            {selectedUnit.plan.rooms.map((room) => (
+              <article
+                key={room.id}
+                className={`studio-room studio-room--${room.kind}${generated ? ' is-generated' : ''}`}
+              >
+                <div className="studio-room__media">
+                  <SpatialRenderer room={room} concept={concept} generated={generated} />
+                </div>
+                <div className="studio-room__body">
+                  <div className="studio-room__head">
+                    <span className={`studio-room__kind studio-room__kind--${room.kind}`}>
+                      {room.kind === 'living' && '거실'}
+                      {room.kind === 'kitchen' && '주방'}
+                      {room.kind === 'bedroom' && (room.name.includes('안방') ? '안방' : '침실')}
+                      {room.kind === 'bathroom' && '욕실'}
+                      {room.kind === 'utility' && '다용도실'}
+                    </span>
+                    <strong>{room.name}</strong>
+                  </div>
+                  <dl className="studio-room__spec">
+                    <div><dt>면적</dt><dd>{(room.width * room.depth).toFixed(1)}㎡</dd></div>
+                    <div><dt>가로</dt><dd>{room.width.toFixed(1)}m</dd></div>
+                    <div><dt>세로</dt><dd>{room.depth.toFixed(1)}m</dd></div>
+                    <div><dt>천장</dt><dd>{room.height.toFixed(2)}m</dd></div>
+                  </dl>
+                  <p className="studio-room__desc">
+                    {room.kind === 'living' && '소파·테이블·TV를 벽면과 도어 정렬로 배치해 동선 폭을 확보합니다.'}
+                    {room.kind === 'kitchen' && '싱크대·아일랜드·냉장고를 삼각 동선으로 배치하고 식사 공간과 분리합니다.'}
+                    {room.kind === 'bedroom' && '침대·협탁·衣柜를 직각 정렬해 수납과 통행을 동시에 확보합니다.'}
+                    {room.kind === 'bathroom' && '세면대·변기·욕조를 결로 방지 배선으로 분리해 결로·누수를 차단합니다.'}
+                    {room.kind === 'utility' && '세탁기·건조기·수납장을 일렬 정렬해 동선을 단축시킵니다.'}
+                  </p>
+                  <ul className="studio-room__chips" aria-label="적용 마감재">
+                    {room.kind === 'living' && (
+                      <>
+                        <li>{selectedConcept.id === 'warm' ? '오크 원목' : selectedConcept.id === 'modern' ? '스톤 그레이' : '린넨 베이지'}</li>
+                        <li>간접조명 3000K</li>
+                      </>
+                    )}
+                    {room.kind === 'kitchen' && (
+                      <>
+                        <li>인조대리석 상판</li>
+                        <li>매트 그레이 도어</li>
+                      </>
+                    )}
+                    {room.kind === 'bedroom' && (
+                      <>
+                        <li>강화 마루</li>
+                        <li>흡음 벽지</li>
+                        <li>시스템 衣柜</li>
+                      </>
+                    )}
+                    {room.kind === 'bathroom' && (
+                      <>
+                        <li>포세린 타일 600×600</li>
+                        <li>방수 도막</li>
+                      </>
+                    )}
+                    {room.kind === 'utility' && (
+                      <>
+                        <li>슬립 방수 시트</li>
+                        <li>제습 환기팬</li>
+                      </>
+                    )}
+                  </ul>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
 
         <div className="studio-quote-cta">
           <div><strong>이 컨셉으로 실제 견적을 받아볼까요?</strong><p>선택한 아파트, 유닛 타입과 컨셉을 견적 상담에 함께 전달합니다.</p></div>

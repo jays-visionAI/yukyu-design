@@ -5,9 +5,15 @@ import { formatKRW, relativeTime } from '../../lib/format';
 import StatusBadge from '../../components/StatusBadge';
 import { StarStatic } from '../../components/StarRating';
 import type { QuoteStatus } from '../../data/types';
+import {
+  CONSULTATION_STATUS_LABEL,
+  BUDGET_LABEL,
+  MOVE_IN_LABEL,
+  type ConsultationStatus,
+} from '../../data/consultation';
 
 export default function AdminDashboard() {
-  const { quotes, portfolio } = useData();
+  const { quotes, portfolio, consultations } = useData();
 
   const stats = useMemo(() => {
     const total = quotes.length;
@@ -70,6 +76,111 @@ export default function AdminDashboard() {
 
   const maxDaily = Math.max(1, ...daily.map((d) => d.count));
 
+  // ============================================================
+  //  상담(Consultations) 집계 — AdminConsultations 와 동일한 도메인
+  // ============================================================
+
+  const consultStats = useMemo(() => {
+    const total = consultations.length;
+    const received = consultations.filter((c) => c.status === 'received').length;
+    const contacted = consultations.filter((c) => c.status === 'contacted').length;
+    const consulting = consultations.filter((c) => c.status === 'consulting').length;
+    const proposal = consultations.filter((c) => c.status === 'proposal').length;
+    const contracted = consultations.filter((c) => c.status === 'contracted').length;
+    const onHold = consultations.filter((c) => c.status === 'on_hold').length;
+    const cancelled = consultations.filter((c) => c.status === 'cancelled').length;
+    const completed = consultations.filter((c) => c.status === 'completed').length;
+
+    // 미배정: received 상태 + 담당자 미지정
+    const unassigned = consultations.filter(
+      (c) => c.status === 'received' && !c.assignedAdmin
+    );
+    // 24시간 이상 미연락 (received 상태에서 24시간 경과)
+    const stale = consultations.filter((c) => {
+      if (c.status !== 'received') return false;
+      const hoursAgo =
+        (Date.now() - new Date(c.createdAt).getTime()) / (1000 * 60 * 60);
+      return hoursAgo > 24;
+    });
+    // 오늘 신규 (KST 기준 자정 ~)
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const newToday = consultations.filter(
+      (c) => new Date(c.createdAt).getTime() >= todayStart.getTime()
+    ).length;
+    return {
+      total,
+      received,
+      contacted,
+      consulting,
+      proposal,
+      contracted,
+      onHold,
+      cancelled,
+      completed,
+      unassigned,
+      stale,
+      newToday,
+    };
+  }, [consultations]);
+
+  const consultPipeline = useMemo<
+    { status: ConsultationStatus; label: string; count: number }[]
+  >(() => {
+    const order: { status: ConsultationStatus; label: string }[] = [
+      { status: 'received', label: '신규' },
+      { status: 'contacted', label: '연락완료' },
+      { status: 'consulting', label: '상담중' },
+      { status: 'proposal', label: '제안서' },
+      { status: 'contracted', label: '계약' },
+      { status: 'completed', label: '완료' },
+    ];
+    return order.map((o) => ({
+      ...o,
+      count: consultations.filter((c) => c.status === o.status).length,
+    }));
+  }, [consultations]);
+
+  const consultRecent = useMemo(
+    () =>
+      [...consultations]
+        .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
+        .slice(0, 5),
+    [consultations]
+  );
+
+  const attentionList = useMemo(() => {
+    const items: { id: string; name: string; phone: string; reason: string; hoursAgo: number }[] = [];
+    consultStats.unassigned.forEach((c) => {
+      const hoursAgo = Math.round(
+        (Date.now() - new Date(c.createdAt).getTime()) / (1000 * 60 * 60)
+      );
+      items.push({
+        id: c.id,
+        name: c.name,
+        phone: c.phone,
+        reason: hoursAgo >= 24 ? `미배정 · ${hoursAgo}시간 경과` : '미배정',
+        hoursAgo,
+      });
+    });
+    consultStats.stale.forEach((c) => {
+      if (items.find((i) => i.id === c.id)) return;
+      const hoursAgo = Math.round(
+        (Date.now() - new Date(c.createdAt).getTime()) / (1000 * 60 * 60)
+      );
+      items.push({
+        id: c.id,
+        name: c.name,
+        phone: c.phone,
+        reason: `${hoursAgo}시간 경과 · 연락 필요`,
+        hoursAgo,
+      });
+    });
+    return items
+      .sort((a, b) => b.hoursAgo - a.hoursAgo)
+      .slice(0, 5);
+  }, [consultStats.stale, consultStats.unassigned]);
+
   return (
     <div style={{ padding: '32px 36px' }}>
       <div style={{ marginBottom: 24 }}>
@@ -114,6 +225,242 @@ export default function AdminDashboard() {
           big
         />
       </div>
+
+      {/* ============ 상담 파이프라인 (신규) ============ */}
+      <div
+        className="card card-tight"
+        style={{ marginBottom: 24 }}
+      >
+        <div
+          className="row-between"
+          style={{ marginBottom: 16, flexWrap: 'wrap', gap: 12 }}
+        >
+          <div>
+            <h2 style={{ fontSize: 'var(--text-lg)' }}>상담 파이프라인</h2>
+            <p style={{ color: 'var(--color-text-secondary)', fontSize: 13 }}>
+              신규 접수부터 완료까지 단계별 현황. 미배정 / 24시간 경과 건은 별도 알림으로 표시됩니다.
+            </p>
+          </div>
+          <div className="row" style={{ gap: 16, flexWrap: 'wrap' }}>
+            <Mini label="오늘 신규" value={consultStats.newToday} />
+            <Mini label="미배정" value={consultStats.unassigned.length} highlight={consultStats.unassigned.length > 0} />
+            <Mini
+              label="24h 경과"
+              value={consultStats.stale.length}
+              highlight={consultStats.stale.length > 0}
+            />
+            <Link to="/admin/consultations" className="btn btn-outline btn-sm">
+              상담 관리 →
+            </Link>
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
+            gap: 10,
+          }}
+        >
+          {consultPipeline.map((p) => {
+            const pct =
+              consultStats.total === 0
+                ? 0
+                : Math.round((p.count / consultStats.total) * 100);
+            return (
+              <div
+                key={p.status}
+                style={{
+                  padding: 16,
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--color-border)',
+                  background:
+                    p.status === 'received' && p.count > 0
+                      ? 'var(--ink-50)'
+                      : '#fff',
+                  borderColor:
+                    p.status === 'received' && p.count > 0
+                      ? 'var(--ink-900)'
+                      : 'var(--color-border)',
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase',
+                    color: 'var(--color-text-tertiary)',
+                    marginBottom: 6,
+                  }}
+                >
+                  {p.label}
+                </div>
+                <div
+                  style={{
+                    fontSize: 26,
+                    fontWeight: 800,
+                    color: 'var(--color-text-primary)',
+                    lineHeight: 1.1,
+                  }}
+                >
+                  {p.count}
+                </div>
+                <div
+                  style={{
+                    marginTop: 6,
+                    fontSize: 11,
+                    color: 'var(--color-text-tertiary)',
+                  }}
+                >
+                  {pct}% · {consultStats.total}건 중
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {attentionList.length > 0 && (
+          <div
+            style={{
+              marginTop: 16,
+              padding: 14,
+              background: '#fef2f2',
+              borderLeft: '3px solid #fca5a5',
+              borderRadius: 4,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 12,
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+                color: 'var(--color-text-primary)',
+                marginBottom: 8,
+              }}
+            >
+              ⚠ 즉시 확인 필요 ({attentionList.length}건)
+            </div>
+            <div className="stack" style={{ gap: 8 }}>
+              {attentionList.map((i) => (
+                <Link
+                  key={i.id}
+                  to={`/admin/consultations/${i.id}`}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    padding: '8px 10px',
+                    background: '#fff',
+                    borderRadius: 6,
+                    textDecoration: 'none',
+                    color: 'var(--color-text-primary)',
+                    fontSize: 13,
+                  }}
+                >
+                  <span>
+                    <strong>{i.name}</strong>
+                    <span
+                      style={{
+                        marginLeft: 8,
+                        color: 'var(--color-text-tertiary)',
+                        fontFamily: 'var(--font-family-num)',
+                      }}
+                    >
+                      {i.phone}
+                    </span>
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: '#b91c1c',
+                    }}
+                  >
+                    {i.reason}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ============ 최근 상담 카드 ============ */}
+      {consultRecent.length > 0 && (
+        <div
+          className="card card-tight"
+          style={{ marginBottom: 24 }}
+        >
+          <div className="row-between" style={{ marginBottom: 16 }}>
+            <h2 style={{ fontSize: 'var(--text-lg)' }}>최근 상담</h2>
+            <Link to="/admin/consultations" className="btn btn-ghost btn-sm">
+              전체 보기 →
+            </Link>
+          </div>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+              gap: 12,
+            }}
+          >
+            {consultRecent.map((c) => (
+              <Link
+                key={c.id}
+                to={`/admin/consultations/${c.id}`}
+                style={{
+                  display: 'block',
+                  padding: 16,
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--radius-md)',
+                  textDecoration: 'none',
+                  color: 'var(--color-text-primary)',
+                  background:
+                    c.status === 'received' && !c.assignedAdmin
+                      ? 'var(--ink-50)'
+                      : '#fff',
+                }}
+              >
+                <div
+                  className="row-between"
+                  style={{ marginBottom: 8 }}
+                >
+                  <strong style={{ fontSize: 15 }}>{c.name}</strong>
+                  <span
+                    className="consult-status-pill"
+                    data-status={c.status}
+                  >
+                    {CONSULTATION_STATUS_LABEL[c.status]}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: 'var(--color-text-tertiary)',
+                    marginBottom: 8,
+                  }}
+                >
+                  {c.apartment}
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
+                  {c.moveIn ? MOVE_IN_LABEL[c.moveIn] : '일정 미정'} ·{' '}
+                  {c.budget ? BUDGET_LABEL[c.budget] : '예산 미정'}
+                </div>
+                <div
+                  style={{
+                    marginTop: 10,
+                    fontSize: 11,
+                    color: 'var(--color-text-tertiary)',
+                  }}
+                >
+                  {relativeTime(c.createdAt)}
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div
         style={{
@@ -375,6 +722,51 @@ export default function AdminDashboard() {
             공개 <strong>{portfolio.filter((p) => p.published).length}</strong>건
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function Mini({
+  label,
+  value,
+  highlight,
+}: {
+  label: string;
+  value: string | number;
+  highlight?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        padding: '6px 12px',
+        borderRadius: 8,
+        background: highlight ? '#fef2f2' : 'var(--ink-100)',
+        border: highlight ? '1px solid #fca5a5' : '1px solid transparent',
+        textAlign: 'center',
+        minWidth: 78,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 10,
+          fontWeight: 700,
+          letterSpacing: '0.06em',
+          textTransform: 'uppercase',
+          color: highlight ? '#b91c1c' : 'var(--color-text-tertiary)',
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          fontSize: 18,
+          fontWeight: 800,
+          color: highlight ? '#b91c1c' : 'var(--color-text-primary)',
+          lineHeight: 1.2,
+        }}
+      >
+        {value}
       </div>
     </div>
   );

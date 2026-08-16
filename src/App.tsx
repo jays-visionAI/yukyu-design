@@ -6,11 +6,15 @@ import QuoteStep1 from './pages/quote/QuoteStep1';
 import QuoteStep2 from './pages/quote/QuoteStep2';
 import QuoteDone from './pages/quote/QuoteDone';
 import QuoteTrack from './pages/quote/QuoteTrack';
+import ConsultStep1 from './pages/consult/ConsultStep1';
+import ConsultStep2 from './pages/consult/ConsultStep2';
+import ConsultDone from './pages/consult/ConsultDone';
 import PartnerApply from './pages/partner/PartnerApply';
 import PartnerDone from './pages/partner/PartnerDone';
 import AdminLogin from './pages/admin/AdminLogin';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminQuotes from './pages/admin/AdminQuotes';
+import AdminConsultations from './pages/admin/AdminConsultations';
 import AdminPortfolio from './pages/admin/AdminPortfolio';
 import AdminReviews from './pages/admin/AdminReviews';
 import AdminAnalytics from './pages/admin/AdminAnalytics';
@@ -47,6 +51,10 @@ export default function App() {
       <Route path="/quote/done" element={<QuoteDone />} />
       <Route path="/quote/track/:id" element={<QuoteTrack />} />
 
+      <Route path="/consult" element={<ConsultStep1 />} />
+      <Route path="/consult/step-2" element={<ConsultStep2 />} />
+      <Route path="/consult/done" element={<ConsultDone />} />
+
       <Route path="/partner/apply" element={<PartnerApply />} />
       <Route path="/partner/done" element={<PartnerDone />} />
 
@@ -64,6 +72,8 @@ export default function App() {
         <Route path="analytics" element={<AdminAnalytics />} />
         <Route path="quotes" element={<AdminQuotes />} />
         <Route path="quotes/:id" element={<AdminQuotes />} />
+        <Route path="consultations" element={<AdminConsultations />} />
+        <Route path="consultations/:id" element={<AdminConsultations />} />
         <Route path="portfolio" element={<AdminPortfolio />} />
         <Route path="reviews" element={<AdminReviews />} />
         <Route path="partners" element={<AdminPartners />} />

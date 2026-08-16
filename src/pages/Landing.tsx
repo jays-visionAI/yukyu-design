@@ -68,6 +68,17 @@ export default function Landing() {
                 <Link to="/quote" className="btn btn-accent btn-lg">
                   견적신청 →
                 </Link>
+                <Link
+                  to="/consult"
+                  className="btn btn-lg"
+                  style={{
+                    background: '#fff',
+                    color: 'var(--ink-900)',
+                    border: '1px solid var(--ink-900)',
+                  }}
+                >
+                  상담 신청
+                </Link>
                 <a
                   href="#portfolio"
                   className="btn btn-lg"
